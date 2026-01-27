@@ -1,0 +1,453 @@
+.loading {
+  text-align: center;
+  padding: 4rem 2rem;
+  font-size: 1.125rem;
+  color: #4a5568;
+}
+
+.panel {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  padding: 2rem;
+}
+
+.panelHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.panelHeader h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #2d3748;
+  margin: 0;
+}
+
+.helpText {
+  color: #718096;
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+}
+
+.searchInput {
+  padding: 0.75rem 1rem;
+  border: 1px solid #cbd5e0;
+  border-radius: 0.375rem;
+  font-size: 1rem;
+  width: 300px;
+  transition: all 0.2s;
+}
+
+.searchInput:focus {
+  outline: none;
+  border-color: #2c5282;
+  box-shadow: 0 0 0 3px rgba(44, 82, 130, 0.1);
+}
+
+.table {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+thead {
+  background: #f7fafc;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+th {
+  padding: 1rem;
+  text-align: left;
+  font-weight: 600;
+  color: #2d3748;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+td {
+  padding: 1rem;
+  border-bottom: 1px solid #e2e8f0;
+  color: #4a5568;
+}
+
+tr:hover {
+  background: #f7fafc;
+}
+
+.name {
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.summary {
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  display: inline-block;
+  background: #48bb78;
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 1rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.badgeInactive {
+  display: inline-block;
+  background: #cbd5e0;
+  color: #4a5568;
+  padding: 0.25rem 0.75rem;
+  border-radius: 1rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.empty {
+  text-align: center;
+  padding: 3rem;
+  color: #718096;
+  font-size: 1rem;
+}
+
+.plansGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.5rem;
+}
+
+.planCard {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  background: #f7fafc;
+  transition: all 0.2s;
+}
+
+.planCard:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.planCardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.planCardHeader h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #2d3748;
+  margin: 0;
+}
+
+.planCardActions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.planDescription {
+  color: #4a5568;
+  margin-bottom: 1rem;
+  line-height: 1.5;
+}
+
+.planDetails {
+  background: white;
+  border-radius: 0.375rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.detailRow {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  color: #4a5568;
+}
+
+.detailRow:not(:last-child) {
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.planFeatures {
+  margin-top: 1rem;
+}
+
+.planFeatures strong {
+  display: block;
+  color: #2d3748;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.planFeatures ul {
+  list-style: none;
+  padding: 0;
+}
+
+.planFeatures li {
+  padding: 0.375rem 0;
+  padding-left: 1.25rem;
+  position: relative;
+  color: #4a5568;
+  font-size: 0.875rem;
+}
+
+.planFeatures li::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  color: #48bb78;
+  font-weight: bold;
+}
+
+.form {
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.form h3 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 1.5rem;
+}
+
+.formRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.formGroup {
+  margin-bottom: 1rem;
+}
+
+.formGroup label {
+  display: block;
+  font-weight: 500;
+  color: #4a5568;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.formGroup input,
+.formGroup select,
+.formGroup textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #cbd5e0;
+  border-radius: 0.375rem;
+  font-size: 1rem;
+  transition: all 0.2s;
+}
+
+.formGroup input:focus,
+.formGroup select:focus,
+.formGroup textarea:focus {
+  outline: none;
+  border-color: #2c5282;
+  box-shadow: 0 0 0 3px rgba(44, 82, 130, 0.1);
+}
+
+.buttonPrimary {
+  background: #2c5282;
+  color: white;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 0.375rem;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.buttonPrimary:hover {
+  background: #1a365d;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.buttonSecondary {
+  background: #e2e8f0;
+  color: #4a5568;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 0.375rem;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.buttonSecondary:hover {
+  background: #cbd5e0;
+}
+
+.buttonSuccess {
+  background: #48bb78;
+  color: white;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.buttonWarning {
+  background: #f6ad55;
+  color: white;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.contentList {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.contentCard {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  background: #f7fafc;
+}
+
+.contentCardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.contentCardHeader h3 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #2d3748;
+  margin: 0 0 0.25rem 0;
+}
+
+.pageKey {
+  font-size: 0.75rem;
+  color: #718096;
+  font-family: monospace;
+  background: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+}
+
+.contentPreview {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.375rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  overflow-x: auto;
+}
+
+.contentPreview pre {
+  margin: 0;
+  font-size: 0.75rem;
+  color: #4a5568;
+  font-family: monospace;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.contentMeta {
+  font-size: 0.75rem;
+  color: #718096;
+}
+
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 2rem;
+}
+
+.modalContent {
+  background: white;
+  border-radius: 0.75rem;
+  padding: 2rem;
+  max-width: 800px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+}
+
+.modalContent h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #2d3748;
+  margin-bottom: 1.5rem;
+}
+
+.jsonEditor {
+  font-family: monospace;
+  font-size: 0.875rem;
+}
+
+.modalActions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+@media (max-width: 768px) {
+  .panelHeader {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .searchInput {
+    width: 100%;
+  }
+
+  .table {
+    font-size: 0.875rem;
+  }
+
+  .plansGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .formRow {
+    grid-template-columns: 1fr;
+  }
+
+  .planCardHeader {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+}

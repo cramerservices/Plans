@@ -1,0 +1,261 @@
+.page {
+  min-height: 100vh;
+  background: #f8f9fa;
+}
+
+.hero {
+  background: linear-gradient(135deg, #2c5282 0%, #1a365d 100%);
+  color: white;
+  padding: 6rem 2rem;
+  text-align: center;
+}
+
+.heroContent {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.heroTitle {
+  font-size: 3rem;
+  font-weight: 700;
+  margin-bottom: 1.5rem;
+  line-height: 1.2;
+}
+
+.heroSubtitle {
+  font-size: 1.25rem;
+  margin-bottom: 2rem;
+  opacity: 0.9;
+  line-height: 1.5;
+}
+
+.ctaButton {
+  display: inline-block;
+  background: #48bb78;
+  color: white;
+  padding: 1rem 2.5rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  font-size: 1.125rem;
+  transition: all 0.3s;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.ctaButton:hover {
+  background: #38a169;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+}
+
+.features {
+  padding: 5rem 2rem;
+  background: white;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.sectionTitle {
+  font-size: 2.5rem;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 3rem;
+  color: #2d3748;
+}
+
+.featureGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+
+.featureCard {
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  padding: 2rem;
+  transition: all 0.3s;
+}
+
+.featureCard:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
+  border-color: #cbd5e0;
+}
+
+.featureIcon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  display: block;
+}
+
+.featureTitle {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  color: #2d3748;
+}
+
+.featureDescription {
+  color: #4a5568;
+  line-height: 1.6;
+  margin-bottom: 1.5rem;
+}
+
+.exampleBox {
+  background: white;
+  border: 2px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.exampleBox h4 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  color: #2c5282;
+}
+
+.exampleList {
+  list-style: none;
+  padding: 0;
+}
+
+.exampleList li {
+  padding: 0.5rem 0;
+  color: #4a5568;
+  padding-left: 1.5rem;
+  position: relative;
+}
+
+.exampleList li::before {
+  content: "•";
+  color: #48bb78;
+  font-weight: bold;
+  position: absolute;
+  left: 0;
+}
+
+.summaryExample {
+  font-size: 0.875rem;
+}
+
+.summaryHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.summarySection {
+  margin-bottom: 1rem;
+}
+
+.summarySection strong {
+  display: block;
+  color: #2d3748;
+  margin-bottom: 0.5rem;
+}
+
+.summarySection p {
+  color: #4a5568;
+  margin: 0.25rem 0;
+  padding-left: 1rem;
+}
+
+.benefits {
+  padding: 5rem 2rem;
+  background: #f7fafc;
+}
+
+.benefitsList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.benefit {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: white;
+  padding: 1.25rem;
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s;
+}
+
+.benefit:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  transform: translateX(4px);
+}
+
+.benefitIcon {
+  color: #48bb78;
+  font-size: 1.5rem;
+  font-weight: bold;
+}
+
+.cta {
+  background: linear-gradient(135deg, #2c5282 0%, #1a365d 100%);
+  color: white;
+  padding: 5rem 2rem;
+  text-align: center;
+}
+
+.ctaTitle {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+}
+
+.ctaText {
+  font-size: 1.25rem;
+  margin-bottom: 2rem;
+  opacity: 0.9;
+}
+
+.footer {
+  background: #2d3748;
+  color: white;
+  padding: 2rem;
+  text-align: center;
+}
+
+.footer p {
+  opacity: 0.8;
+}
+
+@media (max-width: 768px) {
+  .heroTitle {
+    font-size: 2rem;
+  }
+
+  .heroSubtitle {
+    font-size: 1rem;
+  }
+
+  .sectionTitle {
+    font-size: 1.75rem;
+  }
+
+  .featureGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .benefitsList {
+    grid-template-columns: 1fr;
+  }
+
+  .ctaTitle {
+    font-size: 1.75rem;
+  }
+}

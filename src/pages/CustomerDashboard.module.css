@@ -1,0 +1,393 @@
+.page {
+  min-height: 100vh;
+  background: #f8f9fa;
+  padding-bottom: 4rem;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.loading {
+  text-align: center;
+  padding: 4rem 2rem;
+  font-size: 1.125rem;
+  color: #4a5568;
+}
+
+.header {
+  margin-bottom: 2rem;
+}
+
+.title {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #2d3748;
+  margin-bottom: 0.5rem;
+}
+
+.subtitle {
+  color: #718096;
+  font-size: 1.125rem;
+}
+
+.noMembership {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  padding: 3rem;
+  text-align: center;
+}
+
+.noMembership h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 1rem;
+}
+
+.noMembership p {
+  color: #718096;
+  margin-bottom: 2rem;
+}
+
+.plansButton {
+  display: inline-block;
+  background: #2c5282;
+  color: white;
+  padding: 0.875rem 2rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.plansButton:hover {
+  background: #1a365d;
+  transform: translateY(-2px);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  padding: 2rem;
+  margin-bottom: 1.5rem;
+}
+
+.cardTitle {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.membershipInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.planName {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #2c5282;
+}
+
+.planStatus {
+  margin-bottom: 1rem;
+}
+
+.statusBadge {
+  display: inline-block;
+  background: #48bb78;
+  color: white;
+  padding: 0.375rem 0.875rem;
+  border-radius: 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.membershipDetails {
+  background: #f7fafc;
+  border-radius: 0.5rem;
+  padding: 1.25rem;
+}
+
+.detailRow {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  color: #4a5568;
+}
+
+.detailRow:not(:last-child) {
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.benefits {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.benefitItem {
+  text-align: center;
+  background: linear-gradient(135deg, #2c5282 0%, #1a365d 100%);
+  color: white;
+  padding: 2rem;
+  border-radius: 0.75rem;
+}
+
+.benefitNumber {
+  font-size: 3rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.benefitLabel {
+  font-size: 1.125rem;
+  opacity: 0.9;
+}
+
+.benefitBadge {
+  background: #48bb78;
+  color: white;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  text-align: center;
+  font-weight: 600;
+}
+
+.benefitBadge span {
+  font-size: 1.25rem;
+  margin-right: 0.5rem;
+}
+
+.benefitNote {
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  color: #4a5568;
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.featuresList {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+
+.featureItem {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: #4a5568;
+}
+
+.checkIcon {
+  color: #48bb78;
+  font-size: 1.25rem;
+  font-weight: bold;
+}
+
+.emptyState {
+  text-align: center;
+  padding: 2rem;
+  color: #718096;
+}
+
+.emptyStateNote {
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+}
+
+.servicesList {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.serviceCard {
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+}
+
+.serviceHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.serviceType {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 0.25rem;
+}
+
+.serviceDate {
+  color: #718096;
+  font-size: 0.875rem;
+}
+
+.technician {
+  background: white;
+  border: 1px solid #e2e8f0;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  color: #4a5568;
+}
+
+.serviceSummary,
+.workCompleted,
+.recommendations {
+  margin-top: 1rem;
+}
+
+.serviceSummary strong,
+.workCompleted strong,
+.recommendations strong {
+  display: block;
+  color: #2d3748;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.serviceSummary p {
+  color: #4a5568;
+  line-height: 1.6;
+}
+
+.workCompleted ul,
+.recommendations ul {
+  list-style: none;
+  padding: 0;
+}
+
+.workCompleted li {
+  padding: 0.5rem 0;
+  padding-left: 1.5rem;
+  position: relative;
+  color: #4a5568;
+}
+
+.workCompleted li::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  color: #48bb78;
+  font-weight: bold;
+}
+
+.notes {
+  color: #718096;
+  font-size: 0.875rem;
+}
+
+.recommendations li {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-left: 3px solid #cbd5e0;
+  border-radius: 0.375rem;
+  padding: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.recommendations li.priority-high {
+  border-left-color: #fc8181;
+  background: #fff5f5;
+}
+
+.recommendations li.priority-medium {
+  border-left-color: #f6ad55;
+  background: #fffaf0;
+}
+
+.recommendations li.priority-low {
+  border-left-color: #63b3ed;
+  background: #ebf8ff;
+}
+
+.recTitle {
+  display: block;
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 0.25rem;
+}
+
+.recDesc {
+  display: block;
+  color: #4a5568;
+  font-size: 0.875rem;
+  margin-bottom: 0.25rem;
+}
+
+.recCost {
+  display: inline-block;
+  background: #2c5282;
+  color: white;
+  padding: 0.25rem 0.625rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-top: 0.5rem;
+}
+
+.contactInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.contactItem {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.75rem 0;
+  color: #4a5568;
+}
+
+.contactItem:not(:last-child) {
+  border-bottom: 1px solid #e2e8f0;
+}
+
+@media (max-width: 768px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .featuresList {
+    grid-template-columns: 1fr;
+  }
+
+  .serviceHeader {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .contactItem {
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+}
