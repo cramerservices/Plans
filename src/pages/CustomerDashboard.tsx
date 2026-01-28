@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { CustomerMembership, ServiceCompleted, Customer } from '../types';
 import styles from './CustomerDashboard.module.css';
+import { Link } from "react-router-dom";
 
 export default function CustomerDashboard() {
   const { user } = useAuth();
@@ -83,9 +84,10 @@ export default function CustomerDashboard() {
           <div className={styles.noMembership}>
             <h2>No Active Membership</h2>
             <p>You don't have an active membership yet. View our plans to get started!</p>
-            <a href="/plans" className={styles.plansButton}>
-              View Plans
-            </a>
+          <Link to="/plans" className={styles.plansButton}>
+  View Plans
+</Link>
+
           </div>
         ) : (
           <>
