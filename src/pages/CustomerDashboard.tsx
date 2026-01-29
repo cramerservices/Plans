@@ -23,7 +23,7 @@ export default function CustomerDashboard() {
     try {
       const [customerResult, membershipsResult, servicesResult] = await Promise.all([
         supabase
-          .from('customers')
+         .from('portal_customers')
           .select('*')
           .eq('id', user?.id)
           .maybeSingle(),
