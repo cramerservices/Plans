@@ -14,6 +14,7 @@ export default function PlansPage() {
   }, []);
 
   const fetchPlans = async () => {
+    setLoading(true);
     try {
       const { data, error } = await supabase
         .from('maintenance_plans')
@@ -21,10 +22,23 @@ export default function PlansPage() {
         .eq('is_active', true)
         .order('price', { ascending: true });
 
-      if (error) throw error;
-      setPlans(data || []);
-    } catch (error) {
-      console.error('Error fetching plans:', error);
+      if (error) {
+        console.error('Supabase error fetching plans:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: (error as any).code,
+        });
+        throw error;
+      }
+
+      setPlans((data as MaintenancePlan[]) || []);
+    } catch (error: any) {
+      console.error('Error fetching plans (raw):', error);
+      // Helpful extra in case the object shape is different
+      console.error('Error message:', error?.message);
+      console.error('Error code:', error?.code);
+      console.error('Error details:', error?.details);
     } finally {
       setLoading(false);
     }
@@ -55,50 +69,66 @@ export default function PlansPage() {
       <section className={styles.plans}>
         <div className={styles.container}>
           <div className={styles.plansGrid}>
-            {plans.map((plan) => (
-              <div key={plan.id} className={styles.planCard}>
-                {plan.priority_service && (
-                  <div className={styles.badge}>Most Popular</div>
-                )}
-
-                <h2 className={styles.planName}>{plan.name}</h2>
-                <p className={styles.planDescription}>{plan.description}</p>
-
-                <div className={styles.pricing}>
-                  <span className={styles.price}>${plan.price}</span>
-                  <span className={styles.frequency}>
-                    /{plan.billing_frequency === 'annual' ? 'year' : 'semi-annual'}
-                  </span>
-                </div>
-
-                <div className={styles.planDetails}>
-                  <div className={styles.detailItem}>
-                    <strong>{plan.tune_ups_per_year}</strong> tune-ups per year
-                  </div>
-                  <div className={styles.detailItem}>
-                    <strong>{plan.discount_percentage}%</strong> discount on repairs
-                  </div>
-                  {plan.priority_service && (
-                    <div className={styles.detailItem}>
-                      <strong>Priority</strong> emergency service
-                    </div>
-                  )}
-                </div>
-
-                <div className={styles.features}>
-                  <h3>Plan Features:</h3>
-                  <ul className={styles.featuresList}>
-                    {plan.features.map((feature, index) => (
-                      <li key={index}>{feature}</li>
-                    ))}
-                  </ul>
-                </div>
-
-                <Link to={`/checkout/${plan.id}`} className={styles.selectButton}>
-                  Select Plan
-                </Link>
+            {plans.length === 0 ? (
+              <div className={styles.loading}>
+                No plans found. (If you just set up Supabase, make sure the table exists and has rows.)
               </div>
-            ))}
+            ) : (
+              plans.map((plan) => {
+                const features = Array.isArray((plan as any).features) ? (plan as any).features : [];
+                const billingFrequency = (plan as any).billing_frequency || 'annual';
+                const tuneUpsPerYear = (plan as any).tune_ups_per_year ?? 2;
+
+                return (
+                  <div key={plan.id} className={styles.planCard}>
+                    {(plan as any).priority_service && <div className={styles.badge}>Most Popular</div>}
+
+                    <h2 className={styles.planName}>{plan.name}</h2>
+
+                    {/* description might not exist yet in your DB */}
+                    {(plan as any).description ? (
+                      <p className={styles.planDescription}>{(plan as any).description}</p>
+                    ) : null}
+
+                    <div className={styles.pricing}>
+                      <span className={styles.price}>${plan.price}</span>
+                      <span className={styles.frequency}>
+                        /{billingFrequency === 'annual' ? 'year' : 'semi-annual'}
+                      </span>
+                    </div>
+
+                    <div className={styles.planDetails}>
+                      <div className={styles.detailItem}>
+                        <strong>{tuneUpsPerYear}</strong> tune-ups per year
+                      </div>
+                      <div className={styles.detailItem}>
+                        <strong>{(plan as any).discount_percentage ?? 0}%</strong> discount on repairs
+                      </div>
+                      {(plan as any).priority_service && (
+                        <div className={styles.detailItem}>
+                          <strong>Priority</strong> emergency service
+                        </div>
+                      )}
+                    </div>
+
+                    <div className={styles.features}>
+                      <h3>Plan Features:</h3>
+                      <ul className={styles.featuresList}>
+                        {features.length ? (
+                          features.map((feature: string, index: number) => <li key={index}>{feature}</li>)
+                        ) : (
+                          <li>Details coming soon.</li>
+                        )}
+                      </ul>
+                    </div>
+
+                    <Link to={`/checkout/${plan.id}`} className={styles.selectButton}>
+                      Select Plan
+                    </Link>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
       </section>
