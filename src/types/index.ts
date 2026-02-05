@@ -22,6 +22,7 @@ export interface MaintenancePlan {
   priority_service: boolean;
   discount_percentage: number;
   features: string[];
+  stripe_price_id?: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;

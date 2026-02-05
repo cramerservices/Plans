@@ -67,9 +67,50 @@ The application is already configured and ready to use. The database includes:
 3. Manage customers, plans, services, and content
 4. Add new services and track customer interactions
 
-## Payment Integration
+## Payment Integration (Stripe Subscriptions)
 
-The checkout flow is designed for Stripe integration. Payment processing placeholder is in place and ready to be connected when Stripe credentials are provided.
+The checkout page now starts a **Stripe Checkout subscription session** for annual recurring billing. Card details are collected securely on Stripe-hosted pages (not in your app).
+
+### 1) Create your Stripe account
+1. Go to [https://dashboard.stripe.com/register](https://dashboard.stripe.com/register)
+2. Verify your email and enable 2FA.
+3. In Stripe Dashboard, complete business details under **Settings → Business details**.
+4. Add bank account and payout details under **Settings → Bank accounts and scheduling**.
+5. Until fully activated, you can still test in **Test mode**.
+
+### 2) Create recurring yearly prices in Stripe
+1. Open **Product Catalog** in Stripe.
+2. Create one Product for each maintenance plan.
+3. For each product, create a **Recurring** price with interval **Yearly**.
+4. Copy each `price_...` ID.
+
+### 3) Save Stripe price IDs in Supabase
+Add `stripe_price_id` to each row in `maintenance_plans`:
+
+```sql
+alter table maintenance_plans
+add column if not exists stripe_price_id text;
+```
+
+Then set each plan's `stripe_price_id` with the yearly `price_...` from Stripe.
+
+### 4) Deploy the Supabase Edge Function
+This repo includes `supabase/functions/create-checkout-session/index.ts`.
+
+Set secrets:
+
+```bash
+supabase secrets set STRIPE_SECRET_KEY=sk_test_...  SUPABASE_SERVICE_ROLE_KEY=...  SITE_URL=https://your-site-url.com
+```
+
+Deploy function:
+
+```bash
+supabase functions deploy create-checkout-session
+```
+
+### 5) Recommended next step (webhook)
+For production, add a Stripe webhook (`checkout.session.completed` and subscription events) to create/update `customer_memberships` only after confirmed payment.
 
 ## Security
 
