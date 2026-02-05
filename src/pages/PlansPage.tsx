@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import Header from '../components/Header';
 import { supabase } from '../lib/supabase';
 import { MaintenancePlan } from '../types';
+import { MINI_SPLIT_HEAD_TIERS, isMiniSplitPlan } from '../lib/miniSplitPricing';
 import styles from './PlansPage.module.css';
 
 export default function PlansPage() {
@@ -78,6 +79,7 @@ export default function PlansPage() {
                 const features = Array.isArray((plan as any).features) ? (plan as any).features : [];
                 const billingFrequency = (plan as any).billing_frequency || 'annual';
                 const tuneUpsPerYear = (plan as any).tune_ups_per_year ?? 2;
+                const isMiniSplit = isMiniSplitPlan(plan.name);
 
                 return (
                   <div key={plan.id} className={styles.planCard}>
@@ -91,11 +93,16 @@ export default function PlansPage() {
                     ) : null}
 
                     <div className={styles.pricing}>
-                      <span className={styles.price}>${plan.price}</span>
+                      <span className={styles.price}>${isMiniSplit ? MINI_SPLIT_HEAD_TIERS[0].amount : plan.price}</span>
                       <span className={styles.frequency}>
                         /{billingFrequency === 'annual' ? 'year' : 'semi-annual'}
                       </span>
                     </div>
+                    {isMiniSplit && (
+                      <div className={styles.detailItem}>
+                        <strong>Mini split:</strong> 4–9 heads ($340 to $525/year)
+                      </div>
+                    )}
 
                     <div className={styles.planDetails}>
                       <div className={styles.detailItem}>

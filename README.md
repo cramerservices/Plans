@@ -67,9 +67,88 @@ The application is already configured and ready to use. The database includes:
 3. Manage customers, plans, services, and content
 4. Add new services and track customer interactions
 
-## Payment Integration
+## Payment Integration (Stripe Subscriptions)
 
-The checkout flow is designed for Stripe integration. Payment processing placeholder is in place and ready to be connected when Stripe credentials are provided.
+The checkout page now starts a **Stripe Checkout subscription session** for annual recurring billing. Card details are collected securely on Stripe-hosted pages (not in your app).
+
+### 1) Create your Stripe account
+1. Go to [https://dashboard.stripe.com/register](https://dashboard.stripe.com/register)
+2. Verify your email and enable 2FA.
+3. In Stripe Dashboard, complete business details under **Settings → Business details**.
+4. Add bank account and payout details under **Settings → Bank accounts and scheduling**.
+5. Until fully activated, you can still test in **Test mode**.
+
+### 2) Create recurring yearly prices in Stripe
+1. Open **Product Catalog** in Stripe.
+2. Create one Product for each maintenance plan.
+3. For each product, create a **Recurring** price with interval **Yearly**.
+4. Copy each `price_...` ID.
+
+### 3) Save Stripe price IDs in Supabase
+Add `stripe_price_id` to each row in `maintenance_plans`:
+
+```sql
+alter table maintenance_plans
+add column if not exists stripe_price_id text;
+```
+
+Then set each plan's `stripe_price_id` with the yearly `price_...` from Stripe.
+
+### 4) Deploy the Supabase Edge Function
+This repo includes `supabase/functions/create-checkout-session/index.ts`.
+
+Set secrets:
+
+```bash
+supabase secrets set STRIPE_SECRET_KEY=sk_test_...  SUPABASE_SERVICE_ROLE_KEY=...  SITE_URL=https://your-site-url.com
+```
+
+Deploy function:
+
+```bash
+supabase functions deploy create-checkout-session
+```
+
+### 5) Recommended next step (webhook)
+For production, add a Stripe webhook (`checkout.session.completed` and subscription events) to create/update `customer_memberships` only after confirmed payment.
+
+
+### Mini Split head-count pricing (4 to 9 heads)
+The checkout now supports Mini Split pricing by head count. If the plan name contains `mini split`, users will choose 4–9 heads at checkout and Stripe will use the matching yearly recurring `price_...` ID.
+
+Configured tiers:
+- 4 heads: $340
+- 5 heads: $400
+- 6 heads: $450
+- 7 heads: $475
+- 8 heads: $500
+- 9 heads: $525
+
+> Important: confirm each Stripe price ID in `src/lib/miniSplitPricing.ts` and `supabase/functions/create-checkout-session/index.ts` exactly matches your Stripe dashboard values.
+
+
+### Common Error: CORS blocked on `create-checkout-session`
+If you see `blocked by CORS policy` in browser console:
+
+1. Confirm the Edge Function exists in the **same Supabase project** used by `VITE_SUPABASE_URL`.
+2. Redeploy after code changes:
+   ```bash
+   supabase functions deploy create-checkout-session
+   ```
+3. Verify function name is exact: `create-checkout-session` (spelling + hyphens).
+4. Ensure function secrets are set:
+   - `STRIPE_SECRET_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `SITE_URL`
+5. In browser DevTools, test preflight manually:
+   ```bash
+   curl -i -X OPTIONS https://<project-ref>.supabase.co/functions/v1/create-checkout-session \
+     -H "Origin: https://your-site.com" \
+     -H "Access-Control-Request-Method: POST"
+   ```
+   You should see `Access-Control-Allow-Origin` in the response.
+
+If the function is missing/not deployed, Supabase can return a non-CORS response and the browser shows a CORS error even though the root issue is deployment/configuration.
 
 ## Security
 
