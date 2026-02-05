@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import Header from '../components/Header';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -9,6 +9,7 @@ import styles from './CheckoutPage.module.css';
 export default function CheckoutPage() {
   const { planId } = useParams<{ planId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
 
   const [plan, setPlan] = useState<MaintenancePlan | null>(null);
@@ -26,9 +27,6 @@ export default function CheckoutPage() {
     city: '',
     state: '',
     zipCode: '',
-    cardNumber: '',
-    expiry: '',
-    cvv: '',
   });
 
   useEffect(() => {
@@ -89,49 +87,28 @@ export default function CheckoutPage() {
     setProcessing(true);
 
     try {
-      const startDate = new Date();
-      const endDate = new Date();
-      endDate.setFullYear(endDate.getFullYear() + 1);
+      const { data, error } = await supabase.functions.invoke('create-checkout-session', {
+        body: {
+          planId,
+          ...formData,
+          agreementSignedAt: new Date().toISOString(),
+        },
+      });
 
-      const customerData = {
-        id: user.id,
-        email: formData.email,
-        full_name: formData.fullName,
-        phone: formData.phone,
-        service_address: formData.serviceAddress,
-        city: formData.city,
-        state: formData.state,
-        zip_code: formData.zipCode,
-      };
+      if (error) {
+        throw error;
+      }
 
-      const { error: customerError } = await supabase
-        .from('customers')
-        .upsert(customerData);
+      if (!data?.url) {
+        throw new Error('Stripe checkout URL was not returned.');
+      }
 
-      if (customerError) throw customerError;
-
-      const membershipData = {
-        customer_id: user.id,
-        plan_id: planId,
-        start_date: startDate.toISOString().split('T')[0],
-        end_date: endDate.toISOString().split('T')[0],
-        status: 'active',
-        tune_ups_remaining: plan?.tune_ups_per_year || 2,
-        agreement_signed_at: new Date().toISOString(),
-      };
-
-      const { error: membershipError } = await supabase
-        .from('customer_memberships')
-        .insert(membershipData);
-
-      if (membershipError) throw membershipError;
-
-      alert('Membership purchased successfully!');
-      navigate('/dashboard');
+      window.location.href = data.url;
     } catch (error) {
-      console.error('Error processing checkout:', error);
-      alert('There was an error processing your purchase. Please try again.');
-    } finally {
+      console.error('Error creating checkout session:', error);
+      alert(
+        'There was an error starting Stripe checkout. Make sure Stripe is configured and try again.',
+      );
       setProcessing(false);
     }
   };
@@ -159,6 +136,12 @@ export default function CheckoutPage() {
       <Header />
 
       <div className={styles.container}>
+        {searchParams.get('checkout') === 'cancelled' && (
+          <div className={styles.bannerWarning}>
+            Checkout was canceled. You can try again whenever you're ready.
+          </div>
+        )}
+
         <div className={styles.content}>
           <div className={styles.planSummary}>
             <h2>Order Summary</h2>
@@ -285,46 +268,8 @@ export default function CheckoutPage() {
               <div className={styles.section}>
                 <h3>Payment Information</h3>
                 <div className={styles.paymentNote}>
-                  Payment processing via Stripe will be integrated here
-                </div>
-
-                <div className={styles.formGroup}>
-                  <label>Card Number</label>
-                  <input
-                    type="text"
-                    name="cardNumber"
-                    value={formData.cardNumber}
-                    onChange={handleChange}
-                    placeholder="4242 4242 4242 4242"
-                    required
-                  />
-                </div>
-
-                <div className={styles.formRow}>
-                  <div className={styles.formGroup}>
-                    <label>Expiry</label>
-                    <input
-                      type="text"
-                      name="expiry"
-                      value={formData.expiry}
-                      onChange={handleChange}
-                      placeholder="MM/YY"
-                      required
-                    />
-                  </div>
-
-                  <div className={styles.formGroup}>
-                    <label>CVV</label>
-                    <input
-                      type="text"
-                      name="cvv"
-                      value={formData.cvv}
-                      onChange={handleChange}
-                      placeholder="123"
-                      maxLength={4}
-                      required
-                    />
-                  </div>
+                  You will be redirected to secure Stripe checkout to enter your card and start your
+                  recurring annual plan.
                 </div>
               </div>
 
@@ -349,12 +294,8 @@ export default function CheckoutPage() {
                 </label>
               </div>
 
-              <button
-                type="submit"
-                className={styles.submitButton}
-                disabled={processing}
-              >
-                {processing ? 'Processing...' : `Purchase Plan - $${plan.price}`}
+              <button type="submit" className={styles.submitButton} disabled={processing}>
+                {processing ? 'Redirecting to Stripe...' : `Continue to Stripe - $${plan.price}/year`}
               </button>
             </form>
           </div>
@@ -365,13 +306,8 @@ export default function CheckoutPage() {
         <div className={styles.modal} onClick={() => setShowAgreement(false)}>
           <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
             <h2>Membership Agreement</h2>
-            <div className={styles.agreementText}>
-              {agreement.content}
-            </div>
-            <button
-              className={styles.closeButton}
-              onClick={() => setShowAgreement(false)}
-            >
+            <div className={styles.agreementText}>{agreement.content}</div>
+            <button className={styles.closeButton} onClick={() => setShowAgreement(false)}>
               Close
             </button>
           </div>
