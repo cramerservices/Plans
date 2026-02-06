@@ -96,32 +96,46 @@ export default function CheckoutPage() {
       return;
     }
 
-    setProcessing(true);
+  setProcessing(true);
 
-    try {
-      const { data, error } = await supabase.functions.invoke('create-checkout-session', {
-        body: {
-          planId,
-          miniSplitHeads: isMiniSplit ? miniSplitHeads : null,
-          ...formData,
-          agreementSignedAt: new Date().toISOString(),
-        },
-      });
+try {
+  // get the logged-in user's access token (required if Verify JWT is ON)
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) throw sessionError;
 
-      if (error) {
-        throw error;
-      }
+  const accessToken = sessionData.session?.access_token;
+  if (!accessToken) {
+    alert('Your session expired. Please log in again.');
+    navigate('/login');
+    return;
+  }
 
-      if (!data?.url) {
-        throw new Error('Stripe checkout URL was not returned.');
-      }
+  // ONLY ONE invoke call
+  const { data, error } = await supabase.functions.invoke('create-checkout-session', {
+    body: {
+      planId,
+      miniSplitHeads: isMiniSplit ? miniSplitHeads : null,
+      ...formData,
+      agreementSignedAt: new Date().toISOString(),
+    },
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
 
-      window.location.href = data.url;
-    } catch (error) {
-      console.error('Error creating checkout session:', error);
-      alert('There was an error starting Stripe checkout. Make sure Stripe is configured and try again.');
-      setProcessing(false);
-    }
+  if (error) throw error;
+
+  if (!data?.url) {
+    throw new Error('Stripe checkout URL was not returned.');
+  }
+
+  window.location.href = data.url;
+} catch (error) {
+  console.error('Error creating checkout session:', error);
+  alert('There was an error starting Stripe checkout. Make sure Stripe is configured and try again.');
+  setProcessing(false);
+}
+
   };
 
   if (loading) {
@@ -340,6 +354,7 @@ export default function CheckoutPage() {
           <button type="submit" className={styles.submitButton} disabled={processing}>
   {processing ? 'Redirecting to Stripe...' : `Continue to Stripe - $${displayedPrice}/year`}
 </button>
+
 
             </form>
           </div>
