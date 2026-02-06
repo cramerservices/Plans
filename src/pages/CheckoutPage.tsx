@@ -17,88 +17,76 @@ export default function CheckoutPage() {
   const [agreement, setAgreement] = useState<MembershipAgreement | null>(null);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [showAgreement, setShowAgreement] = useState(false);
+  const [miniSplitHeads, setMiniSplitHeads] = useState<number>(4);
 
   const [formData, setFormData] = useState({
-    customerName: user?.user_metadata?.full_name || '',
-    email: user?.email || '',
+    fullName: '',
+    email: '',
     phone: '',
-    serviceStreet: '',
-    serviceCity: '',
-    serviceState: '',
-    serviceZip: '',
+    serviceAddress: '',
+    city: '',
+    state: '',
+    zipCode: '',
   });
-
-  const [agreementAccepted, setAgreementAccepted] = useState(false);
-
-  // Mini split support (heads 1–9)
-  const isMiniSplit = plan ? isMiniSplitPlan(plan.name) : false;
-  const [miniSplitHeads, setMiniSplitHeads] = useState<number>(() => {
-    const headsFromUrl = Number(searchParams.get('heads'));
-    return Number.isFinite(headsFromUrl) && headsFromUrl >= 1 && headsFromUrl <= 9 ? headsFromUrl : 1;
-  });
-
-  const selectedMiniSplitTier = isMiniSplit ? getMiniSplitTier(miniSplitHeads) : null;
 
   useEffect(() => {
-    const load = async () => {
-      if (!planId) {
-        setLoading(false);
-        return;
-      }
+    fetchPlanAndAgreement();
+  }, [planId]);
 
-      try {
-        const { data: planData, error: planErr } = await supabase
+  const fetchPlanAndAgreement = async () => {
+    try {
+      const [planResult, agreementResult] = await Promise.all([
+        supabase
           .from('maintenance_plans')
           .select('*')
           .eq('id', planId)
           .eq('is_active', true)
-          .single();
-
-        if (planErr) throw planErr;
-        setPlan(planData);
-
-        const { data: agreementData, error: agreementErr } = await supabase
+          .maybeSingle(),
+        supabase
           .from('membership_agreements')
           .select('*')
           .eq('is_active', true)
           .order('created_at', { ascending: false })
           .limit(1)
-          .maybeSingle();
+          .maybeSingle(),
+      ]);
 
-        if (agreementErr) throw agreementErr;
-        setAgreement(agreementData ?? null);
-      } catch (err) {
-        console.error('Error loading checkout data:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
+      if (planResult.error) throw planResult.error;
+      if (agreementResult.error) throw agreementResult.error;
 
-    load();
-  }, [planId]);
-
-  useEffect(() => {
-    // Keep the form in sync if auth user loads later
-    setFormData((prev) => ({
-      ...prev,
-      customerName: user?.user_metadata?.full_name || prev.customerName,
-      email: user?.email || prev.email,
-    }));
-  }, [user]);
-
-  const handleChange = (field: keyof typeof formData, value: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
+      setPlan(planResult.data);
+      setAgreement(agreementResult.data);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const startStripeCheckout = async () => {
-    if (!planId) return;
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
+    });
+  };
 
-    if (!agreementAccepted) {
-      alert('Please accept the membership agreement to continue.');
+  const isMiniSplit = isMiniSplitPlan(plan?.name);
+  const selectedMiniSplitTier = getMiniSplitTier(miniSplitHeads);
+  const displayedPrice = isMiniSplit ? selectedMiniSplitTier?.amount ?? plan?.price ?? 0 : plan?.price ?? 0;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!agreedToTerms) {
+      alert('Please agree to the membership terms to continue.');
+      return;
+    }
+
+    if (!user) {
+      alert('Please log in or create an account first.');
+      navigate('/login');
       return;
     }
 
@@ -110,38 +98,17 @@ export default function CheckoutPage() {
     setProcessing(true);
 
     try {
-      // ✅ Use explicit Supabase Edge Function URL (fixes GitHub Pages 404 / preflight issues)
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
-
-      if (!supabaseUrl || !anonKey) {
-        throw new Error(
-          'Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY. Add them to your GitHub Pages build env.',
-        );
-      }
-
-      const endpoint = `${supabaseUrl.replace(/\/$/, '')}/functions/v1/create-checkout-session`;
-
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: anonKey,
-          Authorization: `Bearer ${anonKey}`,
-        },
-        body: JSON.stringify({
+      const { data, error } = await supabase.functions.invoke('create-checkout-session', {
+        body: {
           planId,
-          miniSplitHeads: isMiniSplit ? miniSplitHeads : undefined,
+          miniSplitHeads: isMiniSplit ? miniSplitHeads : null,
           ...formData,
           agreementSignedAt: new Date().toISOString(),
-        }),
+        },
       });
 
-      const data = await res.json().catch(() => null);
-
-      if (!res.ok) {
-        const msg = data?.error || data?.details || `Request failed with status ${res.status}`;
-        throw new Error(msg);
+      if (error) {
+        throw error;
       }
 
       if (!data?.url) {
@@ -149,9 +116,11 @@ export default function CheckoutPage() {
       }
 
       window.location.href = data.url;
-    } catch (err) {
-      console.error('Error creating checkout session:', err);
-      alert('There was an error starting Stripe checkout. Make sure Stripe is configured and try again.');
+    } catch (error) {
+      console.error('Error creating checkout session:', error);
+      alert(
+        'There was an error starting Stripe checkout. Make sure Stripe is configured and try again.',
+      );
       setProcessing(false);
     }
   };
@@ -179,143 +148,204 @@ export default function CheckoutPage() {
       <Header />
 
       <div className={styles.container}>
-        <div className={styles.summaryCard}>
-          <h2>Order Summary</h2>
-
-          <div className={styles.planName}>{plan.name}</div>
-
-          {isMiniSplit && (
-            <div className={styles.miniSplitSection}>
-              <label className={styles.label}>Mini split heads</label>
-              <select
-                className={styles.select}
-                value={miniSplitHeads}
-                onChange={(e) => setMiniSplitHeads(Number(e.target.value))}
-                disabled={processing}
-              >
-                {MINI_SPLIT_HEAD_TIERS.map((t) => (
-                  <option key={t.heads} value={t.heads}>
-                    {t.heads} heads – ${t.price}/year
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          <div className={styles.summaryRow}>
-            <span>Total:</span>
-            <span className={styles.total}>
-              {isMiniSplit && selectedMiniSplitTier
-                ? `$${selectedMiniSplitTier.price}/year`
-                : `$${plan.price}/year`}
-            </span>
+        {searchParams.get('checkout') === 'cancelled' && (
+          <div className={styles.bannerWarning}>
+            Checkout was canceled. You can try again whenever you're ready.
           </div>
-        </div>
+        )}
 
-        <div className={styles.formCard}>
-          <h2>Customer Info</h2>
+        <div className={styles.content}>
+          <div className={styles.planSummary}>
+            <h2>Order Summary</h2>
+            <div className={styles.summaryCard}>
+              <h3>{plan.name}</h3>
+              <p className={styles.planDesc}>{plan.description}</p>
 
-          <div className={styles.field}>
-            <label className={styles.label}>Name</label>
-            <input
-              className={styles.input}
-              value={formData.customerName}
-              onChange={(e) => handleChange('customerName', e.target.value)}
-              disabled={processing}
-            />
-          </div>
+              {isMiniSplit && (
+                <div className={styles.miniSplitCallout}>
+                  Mini split pricing is based on head count (4–9 heads).
+                </div>
+              )}
 
-          <div className={styles.field}>
-            <label className={styles.label}>Email</label>
-            <input
-              className={styles.input}
-              value={formData.email}
-              onChange={(e) => handleChange('email', e.target.value)}
-              disabled={processing}
-            />
-          </div>
+              <div className={styles.summaryDetails}>
+                {isMiniSplit && (
+                  <div className={styles.summaryItem}>
+                    <span>Head count:</span>
+                    <strong>{miniSplitHeads}</strong>
+                  </div>
+                )}
+                <div className={styles.summaryItem}>
+                  <span>Tune-ups per year:</span>
+                  <strong>{plan.tune_ups_per_year}</strong>
+                </div>
+                <div className={styles.summaryItem}>
+                  <span>Discount on repairs:</span>
+                  <strong>{plan.discount_percentage}%</strong>
+                </div>
+                <div className={styles.summaryItem}>
+                  <span>Billing:</span>
+                  <strong>
+                    {plan.billing_frequency === 'annual' ? 'Annually' : 'Semi-annually'}
+                  </strong>
+                </div>
+              </div>
 
-          <div className={styles.field}>
-            <label className={styles.label}>Phone</label>
-            <input
-              className={styles.input}
-              value={formData.phone}
-              onChange={(e) => handleChange('phone', e.target.value)}
-              disabled={processing}
-            />
-          </div>
-
-          <h2>Service Address</h2>
-
-          <div className={styles.field}>
-            <label className={styles.label}>Street Address</label>
-            <input
-              className={styles.input}
-              value={formData.serviceStreet}
-              onChange={(e) => handleChange('serviceStreet', e.target.value)}
-              disabled={processing}
-            />
-          </div>
-
-          <div className={styles.gridRow}>
-            <div className={styles.field}>
-              <label className={styles.label}>City</label>
-              <input
-                className={styles.input}
-                value={formData.serviceCity}
-                onChange={(e) => handleChange('serviceCity', e.target.value)}
-                disabled={processing}
-              />
-            </div>
-
-            <div className={styles.field}>
-              <label className={styles.label}>State</label>
-              <input
-                className={styles.input}
-                value={formData.serviceState}
-                onChange={(e) => handleChange('serviceState', e.target.value)}
-                disabled={processing}
-              />
-            </div>
-
-            <div className={styles.field}>
-              <label className={styles.label}>ZIP Code</label>
-              <input
-                className={styles.input}
-                value={formData.serviceZip}
-                onChange={(e) => handleChange('serviceZip', e.target.value)}
-                disabled={processing}
-              />
+              <div className={styles.total}>
+                <span>Total:</span>
+                <strong>${displayedPrice}/year</strong>
+              </div>
             </div>
           </div>
 
-          <h2>Payment Information</h2>
-          <div className={styles.note}>
-            You will be redirected to secure Stripe checkout to enter your card and start your recurring annual plan.
-          </div>
+          <div className={styles.checkoutForm}>
+            <h2>Complete Your Purchase</h2>
 
-          <div className={styles.agreementRow}>
-            <input
-              type="checkbox"
-              checked={agreementAccepted}
-              onChange={(e) => setAgreementAccepted(e.target.checked)}
-              disabled={processing}
-            />
-            <span>
-              I agree to the{' '}
-              <button type="button" className={styles.linkButton} onClick={() => setShowAgreement(true)}>
-                Membership Agreement
+            <form onSubmit={handleSubmit}>
+              <div className={styles.section}>
+                <h3>Contact Information</h3>
+
+                <div className={styles.formGroup}>
+                  <label>Full Name</label>
+                  <input
+                    type="text"
+                    name="fullName"
+                    value={formData.fullName}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+
+                <div className={styles.formGroup}>
+                  <label>Email</label>
+                  <input
+                    type="email"
+                    name="email"
+                    value={formData.email}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+
+                <div className={styles.formGroup}>
+                  <label>Phone</label>
+                  <input
+                    type="tel"
+                    name="phone"
+                    value={formData.phone}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className={styles.section}>
+                <h3>Service Address</h3>
+
+                <div className={styles.formGroup}>
+                  <label>Street Address</label>
+                  <input
+                    type="text"
+                    name="serviceAddress"
+                    value={formData.serviceAddress}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+
+                <div className={styles.formRow}>
+                  <div className={styles.formGroup}>
+                    <label>City</label>
+                    <input
+                      type="text"
+                      name="city"
+                      value={formData.city}
+                      onChange={handleChange}
+                      required
+                    />
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <label>State</label>
+                    <input
+                      type="text"
+                      name="state"
+                      value={formData.state}
+                      onChange={handleChange}
+                      maxLength={2}
+                      required
+                    />
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <label>ZIP Code</label>
+                    <input
+                      type="text"
+                      name="zipCode"
+                      value={formData.zipCode}
+                      onChange={handleChange}
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {isMiniSplit && (
+                <div className={styles.section}>
+                  <h3>Mini Split Setup</h3>
+                  <div className={styles.formGroup}>
+                    <label>How many heads does your mini split system have?</label>
+                    <select
+                      value={miniSplitHeads}
+                      onChange={(e) => setMiniSplitHeads(Number(e.target.value))}
+                      className={styles.selectInput}
+                    >
+                      {MINI_SPLIT_HEAD_TIERS.map((tier) => (
+                        <option key={tier.heads} value={tier.heads}>
+                          {tier.heads} heads — ${tier.amount}/year
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              <div className={styles.section}>
+                <h3>Payment Information</h3>
+                <div className={styles.paymentNote}>
+                  You will be redirected to secure Stripe checkout to enter your card and start your
+                  recurring annual plan.
+                </div>
+              </div>
+
+              <div className={styles.agreement}>
+                <label className={styles.checkbox}>
+                  <input
+                    type="checkbox"
+                    checked={agreedToTerms}
+                    onChange={(e) => setAgreedToTerms(e.target.checked)}
+                    required
+                  />
+                  <span>
+                    I agree to the{' '}
+                    <button
+                      type="button"
+                      className={styles.agreementLink}
+                      onClick={() => setShowAgreement(true)}
+                    >
+                      Membership Agreement
+                    </button>
+                  </span>
+                </label>
+              </div>
+
+              <button type="submit" className={styles.submitButton} disabled={processing}>
+                {processing
+                  ? 'Redirecting to Stripe...'
+                  : `Continue to Stripe - $${displayedPrice}/year`}
+                {processing ? 'Redirecting to Stripe...' : `Continue to Stripe - $${plan.price}/year`}
               </button>
-            </span>
+            </form>
           </div>
-
-          <button className={styles.primaryButton} onClick={startStripeCheckout} disabled={processing}>
-            {processing ? 'Redirecting to Stripe...' : 'Continue to Stripe'}
-          </button>
-
-          <button className={styles.secondaryButton} onClick={() => navigate('/dashboard')} disabled={processing}>
-            Cancel
-          </button>
         </div>
       </div>
 
