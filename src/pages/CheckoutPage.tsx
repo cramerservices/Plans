@@ -119,7 +119,7 @@ try {
       agreementSignedAt: new Date().toISOString(),
     },
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      authorization: `Bearer ${accessToken}`,
     },
   });
 
