@@ -33,6 +33,7 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     fetchPlanAndAgreement();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [planId]);
 
   const fetchPlanAndAgreement = async () => {
@@ -118,9 +119,7 @@ export default function CheckoutPage() {
       window.location.href = data.url;
     } catch (error) {
       console.error('Error creating checkout session:', error);
-      alert(
-        'There was an error starting Stripe checkout. Make sure Stripe is configured and try again.',
-      );
+      alert('There was an error starting Stripe checkout. Make sure Stripe is configured and try again.');
       setProcessing(false);
     }
   };
@@ -339,10 +338,7 @@ export default function CheckoutPage() {
               </div>
 
               <button type="submit" className={styles.submitButton} disabled={processing}>
-                {processing
-                  ? 'Redirecting to Stripe...'
-                  : `Continue to Stripe - $${displayedPrice}/year`}
-                {processing ? 'Redirecting to Stripe...' : `Continue to Stripe - $${plan.price}/year`}
+                {processing ? 'Redirecting to Stripe...' : `Continue to Stripe - $${displayedPrice}/year`}
               </button>
             </form>
           </div>
@@ -362,5 +358,7 @@ export default function CheckoutPage() {
       )}
     </div>
   );
+}
+
 }
 
