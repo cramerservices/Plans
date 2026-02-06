@@ -4,6 +4,7 @@ import Header from '../components/Header';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { MaintenancePlan, MembershipAgreement } from '../types';
+import { MINI_SPLIT_HEAD_TIERS, getMiniSplitTier, isMiniSplitPlan } from '../lib/miniSplitPricing';
 import styles from './CheckoutPage.module.css';
 
 export default function CheckoutPage() {
@@ -18,6 +19,7 @@ export default function CheckoutPage() {
   const [processing, setProcessing] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [showAgreement, setShowAgreement] = useState(false);
+  const [miniSplitHeads, setMiniSplitHeads] = useState<number>(4);
 
   const [formData, setFormData] = useState({
     fullName: '',
@@ -70,6 +72,10 @@ export default function CheckoutPage() {
     });
   };
 
+  const isMiniSplit = isMiniSplitPlan(plan?.name);
+  const selectedMiniSplitTier = getMiniSplitTier(miniSplitHeads);
+  const displayedPrice = isMiniSplit ? selectedMiniSplitTier?.amount ?? plan?.price ?? 0 : plan?.price ?? 0;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -84,12 +90,18 @@ export default function CheckoutPage() {
       return;
     }
 
+    if (isMiniSplit && !selectedMiniSplitTier) {
+      alert('Please select a valid mini split head count.');
+      return;
+    }
+
     setProcessing(true);
 
     try {
       const { data, error } = await supabase.functions.invoke('create-checkout-session', {
         body: {
           planId,
+          miniSplitHeads: isMiniSplit ? miniSplitHeads : null,
           ...formData,
           agreementSignedAt: new Date().toISOString(),
         },
@@ -149,7 +161,19 @@ export default function CheckoutPage() {
               <h3>{plan.name}</h3>
               <p className={styles.planDesc}>{plan.description}</p>
 
+              {isMiniSplit && (
+                <div className={styles.miniSplitCallout}>
+                  Mini split pricing is based on head count (4–9 heads).
+                </div>
+              )}
+
               <div className={styles.summaryDetails}>
+                {isMiniSplit && (
+                  <div className={styles.summaryItem}>
+                    <span>Head count:</span>
+                    <strong>{miniSplitHeads}</strong>
+                  </div>
+                )}
                 <div className={styles.summaryItem}>
                   <span>Tune-ups per year:</span>
                   <strong>{plan.tune_ups_per_year}</strong>
@@ -168,7 +192,7 @@ export default function CheckoutPage() {
 
               <div className={styles.total}>
                 <span>Total:</span>
-                <strong>${plan.price}/year</strong>
+                <strong>${displayedPrice}/year</strong>
               </div>
             </div>
           </div>
@@ -265,6 +289,26 @@ export default function CheckoutPage() {
                 </div>
               </div>
 
+              {isMiniSplit && (
+                <div className={styles.section}>
+                  <h3>Mini Split Setup</h3>
+                  <div className={styles.formGroup}>
+                    <label>How many heads does your mini split system have?</label>
+                    <select
+                      value={miniSplitHeads}
+                      onChange={(e) => setMiniSplitHeads(Number(e.target.value))}
+                      className={styles.selectInput}
+                    >
+                      {MINI_SPLIT_HEAD_TIERS.map((tier) => (
+                        <option key={tier.heads} value={tier.heads}>
+                          {tier.heads} heads — ${tier.amount}/year
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+
               <div className={styles.section}>
                 <h3>Payment Information</h3>
                 <div className={styles.paymentNote}>
@@ -295,6 +339,9 @@ export default function CheckoutPage() {
               </div>
 
               <button type="submit" className={styles.submitButton} disabled={processing}>
+                {processing
+                  ? 'Redirecting to Stripe...'
+                  : `Continue to Stripe - $${displayedPrice}/year`}
                 {processing ? 'Redirecting to Stripe...' : `Continue to Stripe - $${plan.price}/year`}
               </button>
             </form>

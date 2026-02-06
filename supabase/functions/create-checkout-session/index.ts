@@ -1,6 +1,28 @@
 import Stripe from 'https://esm.sh/stripe@18.0.0?target=deno';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+const buildCorsHeaders = (origin: string | null) => ({
+  'Access-Control-Allow-Origin': origin ?? '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  Vary: 'Origin',
+});
+
+const miniSplitHeadPricing: Record<number, { amount: number; stripePriceId: string }> = {
+  4: { amount: 340, stripePriceId: 'price_1Sx7Hb4IltCwxOnNaFhEgNOR' },
+  5: { amount: 400, stripePriceId: 'price_1Sx7Hq4IltCwxOnNY8mtIhbM' },
+  6: { amount: 450, stripePriceId: 'price_1SxZIY4IltCwxOnNCryF0YRo' },
+  7: { amount: 475, stripePriceId: 'price_1SxZIn4IltCwxOnNwDOM6KJM' },
+  8: { amount: 500, stripePriceId: 'price_1SxZJ14IltCwxOnNvXSBPiXr' },
+  9: { amount: 525, stripePriceId: 'price_1SxZJD4IltCwxOnNL1ViF8YA' },
+};
+
+const isMiniSplitPlan = (planName?: string | null) =>
+  (planName ?? '').toLowerCase().includes('mini split');
+
+Deno.serve(async (req) => {
+  const corsHeaders = buildCorsHeaders(req.headers.get('origin'));
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -9,6 +31,13 @@ const corsHeaders = {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
+  }
+
+  if (req.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed.' }), {
+      status: 405,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 
   try {
@@ -41,6 +70,7 @@ Deno.serve(async (req) => {
 
     const {
       planId,
+      miniSplitHeads,
       fullName,
       email,
       phone,
@@ -71,6 +101,20 @@ Deno.serve(async (req) => {
       throw planError;
     }
 
+    if (!plan) {
+      throw new Error('Plan not found.');
+    }
+
+    const useMiniSplitTier = isMiniSplitPlan(plan.name);
+    const selectedMiniSplitTier = useMiniSplitTier ? miniSplitHeadPricing[Number(miniSplitHeads)] : null;
+
+    if (useMiniSplitTier && !selectedMiniSplitTier) {
+      throw new Error('For mini split plans, head count must be between 4 and 9.');
+    }
+
+    const stripePriceId = useMiniSplitTier ? selectedMiniSplitTier!.stripePriceId : plan.stripe_price_id;
+
+    if (!stripePriceId) {
     if (!plan?.stripe_price_id) {
       throw new Error('This plan is not connected to Stripe yet. Add stripe_price_id in maintenance_plans.');
     }
@@ -144,6 +188,7 @@ Deno.serve(async (req) => {
       customer: stripeCustomerId,
       line_items: [
         {
+          price: stripePriceId,
           price: plan.stripe_price_id,
           quantity: 1,
         },
@@ -152,6 +197,10 @@ Deno.serve(async (req) => {
       cancel_url: `${siteUrl}/checkout/${planId}?checkout=cancelled`,
       metadata: {
         plan_id: planId,
+        plan_name: plan.name,
+        customer_id: user.id,
+        mini_split_heads: useMiniSplitTier ? String(miniSplitHeads) : '',
+        mini_split_amount: useMiniSplitTier ? String(selectedMiniSplitTier?.amount) : '',
         customer_id: user.id,
         agreement_signed_at: agreementSignedAt ?? new Date().toISOString(),
       },
@@ -159,6 +208,7 @@ Deno.serve(async (req) => {
         metadata: {
           plan_id: planId,
           customer_id: user.id,
+          mini_split_heads: useMiniSplitTier ? String(miniSplitHeads) : '',
         },
       },
     });

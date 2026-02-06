@@ -111,6 +111,47 @@ supabase functions deploy create-checkout-session
 
 ### 5) Recommended next step (webhook)
 For production, add a Stripe webhook (`checkout.session.completed` and subscription events) to create/update `customer_memberships` only after confirmed payment.
+<<<<<<< codex/add-stripe-for-recurring-payments-e7syit
+
+
+### Mini Split head-count pricing (4 to 9 heads)
+The checkout now supports Mini Split pricing by head count. If the plan name contains `mini split`, users will choose 4–9 heads at checkout and Stripe will use the matching yearly recurring `price_...` ID.
+
+Configured tiers:
+- 4 heads: $340
+- 5 heads: $400
+- 6 heads: $450
+- 7 heads: $475
+- 8 heads: $500
+- 9 heads: $525
+
+> Important: confirm each Stripe price ID in `src/lib/miniSplitPricing.ts` and `supabase/functions/create-checkout-session/index.ts` exactly matches your Stripe dashboard values.
+
+
+### Common Error: CORS blocked on `create-checkout-session`
+If you see `blocked by CORS policy` in browser console:
+
+1. Confirm the Edge Function exists in the **same Supabase project** used by `VITE_SUPABASE_URL`.
+2. Redeploy after code changes:
+   ```bash
+   supabase functions deploy create-checkout-session
+   ```
+3. Verify function name is exact: `create-checkout-session` (spelling + hyphens).
+4. Ensure function secrets are set:
+   - `STRIPE_SECRET_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `SITE_URL`
+5. In browser DevTools, test preflight manually:
+   ```bash
+   curl -i -X OPTIONS https://<project-ref>.supabase.co/functions/v1/create-checkout-session \
+     -H "Origin: https://your-site.com" \
+     -H "Access-Control-Request-Method: POST"
+   ```
+   You should see `Access-Control-Allow-Origin` in the response.
+
+If the function is missing/not deployed, Supabase can return a non-CORS response and the browser shows a CORS error even though the root issue is deployment/configuration.
+=======
+>>>>>>> main
 
 ## Security
 
