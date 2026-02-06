@@ -1,235 +1,240 @@
-import Stripe from 'https://esm.sh/stripe@18.0.0?target=deno';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+/// <reference lib="deno.ns" />
 
-const buildCorsHeaders = (origin: string | null) => ({
-  'Access-Control-Allow-Origin': origin ?? '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  Vary: 'Origin',
-});
+import Stripe from "https://esm.sh/stripe@14.21.0?target=deno";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
-const miniSplitHeadPricing: Record<number, { amount: number; stripePriceId: string }> = {
-  4: { amount: 340, stripePriceId: 'price_1Sx7Hb4IltCwxOnNaFhEgNOR' },
-  5: { amount: 400, stripePriceId: 'price_1Sx7Hq4IltCwxOnNY8mtIhbM' },
-  6: { amount: 450, stripePriceId: 'price_1SxZIY4IltCwxOnNCryF0YRo' },
-  7: { amount: 475, stripePriceId: 'price_1SxZIn4IltCwxOnNwDOM6KJM' },
-  8: { amount: 500, stripePriceId: 'price_1SxZJ14IltCwxOnNvXSBPiXr' },
-  9: { amount: 525, stripePriceId: 'price_1SxZJD4IltCwxOnNL1ViF8YA' },
+// ---------- CORS ----------
+function buildCorsHeaders(origin: string | null) {
+  // Allow your GitHub Pages site + local dev + (optionally) preview domains
+  const allowedOrigins = new Set<string>([
+    "https://cramerservices.github.io",
+    "http://localhost:5173",
+    "http://localhost:4173",
+  ]);
+
+  const allowOrigin =
+    origin && allowedOrigins.has(origin) ? origin : "https://cramerservices.github.io";
+
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Vary": "Origin",
+  };
+}
+
+// ---------- Mini split head-count Price mapping ----------
+// Based on your screenshots
+const MINI_SPLIT_PRICE_BY_HEADS: Record<number, string> = {
+  1: "price_1SxZDh4IltCwxOnNPOewX5Bt
+  2: "price_1SxZEX4lItCwxOnNRnG0JWpx",
+  3: "price_1SxZHL4lItCwxOnNbr7jq9BL",
+  4: "price_1SxZHb4lItCwxOnNaFhEgNOR",
+  5: "price_1SxZHq4lItCwxOnNY8mtIhbM",
+  6: "price_1SxZIY4lItCwxOnNCryF0YRo",
+  7: "price_1SxZIn4lItCwxOnNwDOM6KJM",
+  8: "price_1SxZJ14lItCwxOnNvXSBPiXr",
+  9: "price_1SxZJD4lItCwxOnNL1ViF8YA",
 };
 
-const isMiniSplitPlan = (planName?: string | null) =>
-  (planName ?? '').toLowerCase().includes('mini split');
+// NOTE: You didn’t fully show mini1 ID in the screenshot text you sent earlier.
+// Replace the mini1 value above with your exact mini1 price id.
+// Your screenshot showed it starts with: price_1SxZD...
 
-Deno.serve(async (req) => {
-  const corsHeaders = buildCorsHeaders(req.headers.get('origin'));
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+// ---------- Types ----------
+type RequestBody = {
+  planId: string; // UUID from maintenance_plans
+  miniSplitHeads?: number; // required if plan is mini split, 1-9
+  customer?: {
+    name?: string;
+    email?: string;
+    phone?: string;
+  };
+  serviceAddress?: {
+    line1?: string;
+    line2?: string;
+    city?: string;
+    state?: string;
+    postal_code?: string;
+    country?: string; // default "US"
+  };
+  successUrl?: string;
+  cancelUrl?: string;
 };
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+  const corsHeaders = buildCorsHeaders(req.headers.get("origin"));
+
+  // ✅ Handle preflight
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { status: 200, headers: corsHeaders });
   }
 
-  if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed.' }), {
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
   try {
-    const authHeader = req.headers.get('Authorization');
+    // ---------- Env ----------
+    const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-    if (!authHeader) {
-      throw new Error('Missing Authorization header.');
+    if (!STRIPE_SECRET_KEY) throw new Error("Missing STRIPE_SECRET_KEY secret.");
+    if (!SUPABASE_URL) throw new Error("Missing SUPABASE_URL secret.");
+    if (!SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY secret.");
     }
 
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        global: {
-          headers: {
-            Authorization: authHeader,
-          },
-        },
-      },
-    );
-
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError || !user) {
-      throw new Error('You must be logged in to checkout.');
-    }
-
-    const {
-      planId,
-      miniSplitHeads,
-      fullName,
-      email,
-      phone,
-      serviceAddress,
-      city,
-      state,
-      zipCode,
-      agreementSignedAt,
-    } = await req.json();
-
-    if (!planId || !email) {
-      throw new Error('Missing required checkout fields.');
-    }
-
-    const serviceRoleClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-    );
-
-    const { data: plan, error: planError } = await serviceRoleClient
-      .from('maintenance_plans')
-      .select('id, name, stripe_price_id, is_active')
-      .eq('id', planId)
-      .eq('is_active', true)
-      .maybeSingle();
-
-    if (planError) {
-      throw planError;
-    }
-
-    if (!plan) {
-      throw new Error('Plan not found.');
-    }
-
-    const useMiniSplitTier = isMiniSplitPlan(plan.name);
-    const selectedMiniSplitTier = useMiniSplitTier ? miniSplitHeadPricing[Number(miniSplitHeads)] : null;
-
-    if (useMiniSplitTier && !selectedMiniSplitTier) {
-      throw new Error('For mini split plans, head count must be between 4 and 9.');
-    }
-
-    const stripePriceId = useMiniSplitTier ? selectedMiniSplitTier!.stripePriceId : plan.stripe_price_id;
-
-    if (!stripePriceId) {
-    if (!plan?.stripe_price_id) {
-      throw new Error('This plan is not connected to Stripe yet. Add stripe_price_id in maintenance_plans.');
-    }
-
-    const stripeSecretKey = Deno.env.get('STRIPE_SECRET_KEY');
-    if (!stripeSecretKey) {
-      throw new Error('STRIPE_SECRET_KEY is not configured in Supabase Edge Function secrets.');
-    }
-
-    const stripe = new Stripe(stripeSecretKey, {
-      apiVersion: '2025-08-27.basil',
+    const stripe = new Stripe(STRIPE_SECRET_KEY, {
+      apiVersion: "2023-10-16",
     });
 
-    const { data: customerRecord, error: customerError } = await serviceRoleClient
-      .from('customers')
-      .upsert(
-        {
-          id: user.id,
-          email,
-          full_name: fullName,
-          phone,
-          service_address: serviceAddress,
-          city,
-          state,
-          zip_code: zipCode,
-        },
-        { onConflict: 'id' },
-      )
-      .select('id, stripe_customer_id')
-      .single();
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false },
+    });
 
-    if (customerError) {
-      throw customerError;
+    // ---------- Parse body ----------
+    const body = (await req.json()) as RequestBody;
+
+    if (!body?.planId) {
+      return new Response(JSON.stringify({ error: "planId is required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    let stripeCustomerId = customerRecord.stripe_customer_id;
+    // ---------- Fetch plan ----------
+    const { data: plan, error: planErr } = await supabase
+      .from("maintenance_plans")
+      .select("id, name, stripe_price_id, price, is_active")
+      .eq("id", body.planId)
+      .single();
 
-    if (!stripeCustomerId) {
-      const stripeCustomer = await stripe.customers.create({
-        email,
-        name: fullName,
-        phone,
-        metadata: {
-          supabase_user_id: user.id,
-        },
-        address: {
-          line1: serviceAddress,
-          city,
-          state,
-          postal_code: zipCode,
-          country: 'US',
-        },
+    if (planErr || !plan) {
+      return new Response(
+        JSON.stringify({ error: "Plan not found", details: planErr?.message }),
+        {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    if (plan.is_active === false) {
+      return new Response(JSON.stringify({ error: "Plan is not active." }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
 
-      stripeCustomerId = stripeCustomer.id;
+    // ---------- Decide Stripe price ----------
+    const planName = String(plan.name || "").toLowerCase();
+    const isMiniSplit = planName.includes("mini split");
 
-      const { error: updateCustomerError } = await serviceRoleClient
-        .from('customers')
-        .update({ stripe_customer_id: stripeCustomerId })
-        .eq('id', user.id);
+    let stripePriceId: string | null = plan.stripe_price_id ?? null;
 
-      if (updateCustomerError) {
-        throw updateCustomerError;
+    if (isMiniSplit) {
+      const heads = body.miniSplitHeads;
+      if (!heads || !Number.isInteger(heads) || heads < 1 || heads > 9) {
+        return new Response(
+          JSON.stringify({
+            error: "miniSplitHeads is required for Mini Split plans (1–9).",
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      const mapped = MINI_SPLIT_PRICE_BY_HEADS[heads];
+      if (!mapped || !mapped.startsWith("price_")) {
+        return new Response(
+          JSON.stringify({
+            error: `No Stripe price configured for miniSplitHeads=${heads}.`,
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      stripePriceId = mapped;
+    } else {
+      if (!stripePriceId || !stripePriceId.startsWith("price_")) {
+        return new Response(
+          JSON.stringify({
+            error:
+              "This plan is missing stripe_price_id in Supabase. Set it in maintenance_plans.stripe_price_id.",
+            plan: { id: plan.id, name: plan.name, stripe_price_id: plan.stripe_price_id },
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
       }
     }
 
-    const siteUrl = Deno.env.get('SITE_URL') ?? 'http://localhost:5173';
+    // ---------- URLs ----------
+    // Provide safe defaults if you don’t pass them in
+    const defaultBase = "https://cramerservices.github.io/Plans/#";
+    const successUrl = body.successUrl ?? `${defaultBase}/success?session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = body.cancelUrl ?? `${defaultBase}/checkout/${plan.id}`;
 
+    // ---------- Customer info ----------
+    const customerEmail = body.customer?.email || undefined;
+
+    // ---------- Create Stripe Checkout Session ----------
     const session = await stripe.checkout.sessions.create({
-      mode: 'subscription',
-      customer: stripeCustomerId,
+      mode: "subscription",
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+
+      // Helps autofill Stripe checkout
+      customer_email: customerEmail,
+
       line_items: [
         {
           price: stripePriceId,
-          price: plan.stripe_price_id,
           quantity: 1,
         },
       ],
-      success_url: `${siteUrl}/dashboard?checkout=success`,
-      cancel_url: `${siteUrl}/checkout/${planId}?checkout=cancelled`,
+
+      // Put your own useful data here
       metadata: {
-        plan_id: planId,
-        plan_name: plan.name,
-        customer_id: user.id,
-        mini_split_heads: useMiniSplitTier ? String(miniSplitHeads) : '',
-        mini_split_amount: useMiniSplitTier ? String(selectedMiniSplitTier?.amount) : '',
-        customer_id: user.id,
-        agreement_signed_at: agreementSignedAt ?? new Date().toISOString(),
-      },
-      subscription_data: {
-        metadata: {
-          plan_id: planId,
-          customer_id: user.id,
-          mini_split_heads: useMiniSplitTier ? String(miniSplitHeads) : '',
-        },
+        plan_id: String(plan.id),
+        plan_name: String(plan.name),
+        mini_split_heads: isMiniSplit ? String(body.miniSplitHeads) : "",
+        customer_name: body.customer?.name ?? "",
+        customer_phone: body.customer?.phone ?? "",
+        service_line1: body.serviceAddress?.line1 ?? "",
+        service_city: body.serviceAddress?.city ?? "",
+        service_state: body.serviceAddress?.state ?? "",
+        service_zip: body.serviceAddress?.postal_code ?? "",
       },
     });
 
+    return new Response(JSON.stringify({ url: session.url }), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (err) {
     return new Response(
       JSON.stringify({
-        url: session.url,
+        error: "Failed to create Stripe Checkout session",
+        details: String(err?.message ?? err),
       }),
       {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      },
-    );
-  } catch (error) {
-    return new Response(
-      JSON.stringify({
-        error: error instanceof Error ? error.message : 'Unable to create checkout session.',
-      }),
-      {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      },
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
     );
   }
 });
