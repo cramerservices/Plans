@@ -23,6 +23,12 @@ const isMiniSplitPlan = (planName?: string | null) =>
 Deno.serve(async (req) => {
   const corsHeaders = buildCorsHeaders(req.headers.get('origin'));
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -109,6 +115,7 @@ Deno.serve(async (req) => {
     const stripePriceId = useMiniSplitTier ? selectedMiniSplitTier!.stripePriceId : plan.stripe_price_id;
 
     if (!stripePriceId) {
+    if (!plan?.stripe_price_id) {
       throw new Error('This plan is not connected to Stripe yet. Add stripe_price_id in maintenance_plans.');
     }
 
@@ -182,6 +189,7 @@ Deno.serve(async (req) => {
       line_items: [
         {
           price: stripePriceId,
+          price: plan.stripe_price_id,
           quantity: 1,
         },
       ],
@@ -193,6 +201,7 @@ Deno.serve(async (req) => {
         customer_id: user.id,
         mini_split_heads: useMiniSplitTier ? String(miniSplitHeads) : '',
         mini_split_amount: useMiniSplitTier ? String(selectedMiniSplitTier?.amount) : '',
+        customer_id: user.id,
         agreement_signed_at: agreementSignedAt ?? new Date().toISOString(),
       },
       subscription_data: {

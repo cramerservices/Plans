@@ -111,6 +111,7 @@ supabase functions deploy create-checkout-session
 
 ### 5) Recommended next step (webhook)
 For production, add a Stripe webhook (`checkout.session.completed` and subscription events) to create/update `customer_memberships` only after confirmed payment.
+<<<<<<< codex/add-stripe-for-recurring-payments-e7syit
 
 
 ### Mini Split head-count pricing (4 to 9 heads)
@@ -149,6 +150,8 @@ If you see `blocked by CORS policy` in browser console:
    You should see `Access-Control-Allow-Origin` in the response.
 
 If the function is missing/not deployed, Supabase can return a non-CORS response and the browser shows a CORS error even though the root issue is deployment/configuration.
+=======
+>>>>>>> main
 
 ## Security
 

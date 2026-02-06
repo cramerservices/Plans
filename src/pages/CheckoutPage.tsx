@@ -342,6 +342,7 @@ export default function CheckoutPage() {
                 {processing
                   ? 'Redirecting to Stripe...'
                   : `Continue to Stripe - $${displayedPrice}/year`}
+                {processing ? 'Redirecting to Stripe...' : `Continue to Stripe - $${plan.price}/year`}
               </button>
             </form>
           </div>
