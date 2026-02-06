@@ -337,9 +337,10 @@ export default function CheckoutPage() {
                 </label>
               </div>
 
-              <button type="submit" className={styles.submitButton} disabled={processing}>
-                {processing ? 'Redirecting to Stripe...' : `Continue to Stripe - $${displayedPrice}/year`}
-              </button>
+          <button type="submit" className={styles.submitButton} disabled={processing}>
+  {processing ? 'Redirecting to Stripe...' : `Continue to Stripe - $${displayedPrice}/year`}
+</button>
+
             </form>
           </div>
         </div>
@@ -360,5 +361,5 @@ export default function CheckoutPage() {
   );
 }
 
-}
+
 
