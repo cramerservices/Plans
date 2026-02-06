@@ -40,6 +40,20 @@ export default function CheckoutPage() {
 
   const selectedMiniSplitTier = isMiniSplit ? getMiniSplitTier(miniSplitHeads) : null;
 
+  // Some versions of miniSplitPricing use a different field name than `price`.
+  // This helper keeps CheckoutPage compatible without changing your lib types.
+  const getTierPrice = (tier: any): number | null => {
+    const v =
+      tier?.price ??
+      tier?.amount ??
+      tier?.annualPrice ??
+      tier?.yearlyPrice ??
+      tier?.yearly ??
+      tier?.value ??
+      null;
+    return typeof v === 'number' ? v : null;
+  };
+
   useEffect(() => {
     const load = async () => {
       if (!planId) {
@@ -195,7 +209,7 @@ export default function CheckoutPage() {
               >
                 {MINI_SPLIT_HEAD_TIERS.map((t) => (
                   <option key={t.heads} value={t.heads}>
-                    {t.heads} heads – ${t.price}/year
+                    {t.heads} heads – ${getTierPrice(t as any) ?? ''}/year
                   </option>
                 ))}
               </select>
@@ -206,7 +220,7 @@ export default function CheckoutPage() {
             <span>Total:</span>
             <span className={styles.total}>
               {isMiniSplit && selectedMiniSplitTier
-                ? `$${selectedMiniSplitTier.price}/year`
+                ? `$${getTierPrice(selectedMiniSplitTier as any) ?? ''}/year`
                 : `$${plan.price}/year`}
             </span>
           </div>
@@ -333,4 +347,5 @@ export default function CheckoutPage() {
     </div>
   );
 }
+
 
