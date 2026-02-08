@@ -85,18 +85,19 @@ export default function CheckoutPage() {
       return;
     }
 
-    if (!user) {
-      alert('Please log in or create an account first.');
-      navigate('/login');
-      return;
-    }
+ if (!user) {
+  setProcessing(false);
+  alert('Please log in or create an account first.');
+  navigate('/login');
+  return;
+}
 
     if (isMiniSplit && !selectedMiniSplitTier) {
       alert('Please select a valid mini split head count.');
       return;
     }
 
-  setProcessing(true);
+setProcessing(true);
 
 try {
   // get the logged-in user's access token (required if Verify JWT is ON)
@@ -105,31 +106,41 @@ try {
 
   const accessToken = sessionData.session?.access_token;
   if (!accessToken) {
+    setProcessing(false);
     alert('Your session expired. Please log in again.');
     navigate('/login');
     return;
   }
 
-  // ONLY ONE invoke call
-  const { data, error } = await supabase.functions.invoke('create-checkout-session', {
-    body: {
+  // Call the edge function with fetch so the Authorization header is guaranteed
+  const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-checkout-session`;
+
+  const res = await fetch(functionUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
       planId,
       miniSplitHeads: isMiniSplit ? miniSplitHeads : null,
       ...formData,
       agreementSignedAt: new Date().toISOString(),
-    },
-    headers: {
-      authorization: `Bearer ${accessToken}`,
-    },
+    }),
   });
 
-  if (error) throw error;
+  const json = await res.json();
 
-  if (!data?.url) {
+  if (!res.ok) {
+    console.error('Edge function error:', json);
+    throw new Error(json?.error || json?.message || 'Edge function request failed');
+  }
+
+  if (!json?.url) {
     throw new Error('Stripe checkout URL was not returned.');
   }
 
-  window.location.href = data.url;
+  window.location.href = json.url;
 } catch (error) {
   console.error('Error creating checkout session:', error);
   alert('There was an error starting Stripe checkout. Make sure Stripe is configured and try again.');
