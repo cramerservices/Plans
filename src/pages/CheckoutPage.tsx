@@ -117,10 +117,12 @@ try {
 
   const res = await fetch(functionUrl, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      authorization: `Bearer ${accessToken}`,
-    },
+headers: {
+  "Content-Type": "application/json",
+  Authorization: `Bearer ${accessToken}`,
+  authorization: `Bearer ${accessToken}`,
+},
+
     body: JSON.stringify({
       planId,
       miniSplitHeads: isMiniSplit ? miniSplitHeads : null,
