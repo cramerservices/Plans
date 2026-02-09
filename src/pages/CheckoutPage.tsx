@@ -1,17 +1,14 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import Header from '../components/Header';
 import { supabase } from '../lib/supabase';
-import { useAuth } from '../contexts/AuthContext';
 import { MaintenancePlan, MembershipAgreement } from '../types';
 import { MINI_SPLIT_HEAD_TIERS, getMiniSplitTier, isMiniSplitPlan } from '../lib/miniSplitPricing';
 import styles from './CheckoutPage.module.css';
 
 export default function CheckoutPage() {
   const { planId } = useParams<{ planId: string }>();
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { user } = useAuth();
 
   const [plan, setPlan] = useState<MaintenancePlan | null>(null);
   const [agreement, setAgreement] = useState<MembershipAgreement | null>(null);
