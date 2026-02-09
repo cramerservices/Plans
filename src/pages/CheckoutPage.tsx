@@ -119,9 +119,9 @@ try {
     method: 'POST',
 headers: {
   "Content-Type": "application/json",
-  Authorization: `Bearer ${accessToken}`,
   authorization: `Bearer ${accessToken}`,
 },
+
 
     body: JSON.stringify({
       planId,
