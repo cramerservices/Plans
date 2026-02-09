@@ -99,18 +99,7 @@ export default function CheckoutPage() {
 
 setProcessing(true);
 
-try {
-  // get the logged-in user's access token (required if Verify JWT is ON)
-  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-  if (sessionError) throw sessionError;
 
-  const accessToken = sessionData.session?.access_token;
-  if (!accessToken) {
-    setProcessing(false);
-    alert('Your session expired. Please log in again.');
-    navigate('/login');
-    return;
-  }
 
   // Call the edge function with fetch so the Authorization header is guaranteed
   const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-checkout-session`;
