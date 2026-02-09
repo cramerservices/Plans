@@ -101,18 +101,16 @@ if (!token) {
 }
 
 const res = await fetch(functionUrl, {
-  method: 'POST',
+  method: "POST",
   headers: {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
     apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-    Authorization: `Bearer ${token}`,
+    // (add this too if JWT verification is ON)
+    // Authorization: `Bearer ${token}`,
   },
-  body: JSON.stringify({
-    planId,
-    ...(isMiniSplit ? { miniSplitHeads } : {}),
-    ...formData,
-    agreementSignedAt: new Date().toISOString(),
-  }),
+  body: JSON.stringify(payload),
+});
+
 });
 
 
