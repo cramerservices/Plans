@@ -2,15 +2,35 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
-function buildCorsHeaders(origin: string | null) {
-  const allowedOrigins = new Set<string>([
+type RequestBody = {
+  planId: string;
+  miniSplitHeads?: number; // only needed if your plan is "mini split"
+  // optional customer/service info
+  customerName?: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  streetAddress?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  agreementSignedAt?: string;
+
+  // optional override URLs
+  successUrl?: string;
+  cancelUrl?: string;
+};
+
+function corsHeaders(origin: string | null) {
+  // Add any domains you use for testing here
+  const allowed = new Set([
     "https://cramerservices.github.io",
     "http://localhost:5173",
     "http://localhost:4173",
   ]);
 
-  const allowOrigin =
-    origin && allowedOrigins.has(origin) ? origin : "https://cramerservices.github.io";
+  const allowOrigin = origin && allowed.has(origin)
+    ? origin
+    : "https://cramerservices.github.io";
 
   return {
     "Access-Control-Allow-Origin": allowOrigin,
@@ -20,51 +40,42 @@ function buildCorsHeaders(origin: string | null) {
   };
 }
 
-// Mini split price mapping (keep your mapping as-is if you already have one)
-function getMiniSplitPriceId(heads: number): string | null {
-  const map: Record<number, string> = {
-    // EXAMPLE — replace these with YOUR real Stripe price IDs
-    1: "price_XXXXXXXXXXXX1",
-    2: "price_XXXXXXXXXXXX2",
-    3: "price_XXXXXXXXXXXX3",
-    4: "price_XXXXXXXXXXXX4",
-    5: "price_XXXXXXXXXXXX5",
-    6: "price_XXXXXXXXXXXX6",
-    7: "price_XXXXXXXXXXXX7",
-    8: "price_XXXXXXXXXXXX8",
-    9: "price_XXXXXXXXXXXX9",
-  };
-  return map[heads] ?? null;
+function jsonResponse(body: unknown, status = 200, extraHeaders: Record<string, string> = {}) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      "Content-Type": "application/json",
+      ...extraHeaders,
+    },
+  });
 }
 
-type RequestBody = {
-  planId: string;
-  miniSplitHeads?: number;
-  customer?: { name?: string; email?: string; phone?: string };
-  serviceAddress?: {
-    line1?: string;
-    line2?: string;
-    city?: string;
-    state?: string;
-    postal_code?: string;
-    country?: string;
-  };
-  successUrl?: string;
-  cancelUrl?: string;
-};
+/**
+ * Mini split price mapping:
+ * Recommended: set a Function Secret named MINI_SPLIT_PRICE_MAP_JSON like:
+ * {"1":"price_xxx","2":"price_yyy","3":"price_zzz",...}
+ */
+function getMiniSplitPriceId(heads: number): string | null {
+  const raw = Deno.env.get("MINI_SPLIT_PRICE_MAP_JSON");
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw) as Record<string, string>;
+    return parsed[String(heads)] ?? null;
+  } catch {
+    return null;
+  }
+}
 
 Deno.serve(async (req) => {
-  const corsHeaders = buildCorsHeaders(req.headers.get("origin"));
+  const headers = corsHeaders(req.headers.get("origin"));
 
   if (req.method === "OPTIONS") {
-    return new Response("ok", { status: 200, headers: corsHeaders });
+    return new Response("ok", { status: 200, headers });
   }
 
   if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), {
-      status: 405,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return jsonResponse({ error: "Method not allowed" }, 405, headers);
   }
 
   try {
@@ -73,23 +84,22 @@ Deno.serve(async (req) => {
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
     if (!STRIPE_SECRET_KEY || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-      return new Response(JSON.stringify({ error: "Missing required env vars" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse(
+        { error: "Missing env vars. Need STRIPE_SECRET_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY." },
+        500,
+        headers,
+      );
     }
 
     const body = (await req.json()) as RequestBody;
 
     if (!body?.planId) {
-      return new Response(JSON.stringify({ error: "planId is required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse({ error: "planId is required" }, 400, headers);
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    // Adjust selected columns if your table differs
     const { data: plan, error: planErr } = await supabase
       .from("maintenance_plans")
       .select("id, name, stripe_price_id, is_active")
@@ -97,73 +107,84 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (planErr || !plan) {
-      return new Response(JSON.stringify({ error: "Plan not found", details: planErr?.message }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse(
+        { error: "Plan not found", details: planErr?.message ?? null },
+        404,
+        headers,
+      );
     }
 
     if (plan.is_active === false) {
-      return new Response(JSON.stringify({ error: "Plan is not active." }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse({ error: "Plan is not active" }, 400, headers);
     }
 
-    const planName = String(plan.name || "").toLowerCase();
-    const isMiniSplit = planName.includes("mini split");
+    const planName = String(plan.name ?? "");
+    const isMiniSplit = planName.toLowerCase().includes("mini split");
 
-    let stripePriceId: string | null = plan.stripe_price_id ?? null;
+    let priceId: string | null = plan.stripe_price_id ?? null;
 
+    // If your mini split is a single planId and you choose heads on checkout,
+    // then use MINI_SPLIT_PRICE_MAP_JSON to map heads -> Stripe Price ID.
     if (isMiniSplit) {
       const heads = body.miniSplitHeads;
       if (!heads || !Number.isInteger(heads) || heads < 1 || heads > 9) {
-        return new Response(JSON.stringify({ error: "miniSplitHeads is required for Mini Split plans (1–9)." }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return jsonResponse(
+          { error: "miniSplitHeads is required for Mini Split plans (1–9)." },
+          400,
+          headers,
+        );
       }
-      stripePriceId = getMiniSplitPriceId(heads);
-      if (!stripePriceId) {
-        return new Response(JSON.stringify({ error: "Mini split price not configured for that head count." }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+
+      const mapped = getMiniSplitPriceId(heads);
+      if (!mapped) {
+        return jsonResponse(
+          {
+            error: "Mini split pricing not configured.",
+            hint: 'Set MINI_SPLIT_PRICE_MAP_JSON secret, e.g. {"1":"price_...","2":"price_..."}',
+          },
+          500,
+          headers,
+        );
       }
+      priceId = mapped;
     }
 
-    if (!stripePriceId) {
-      return new Response(JSON.stringify({ error: "Missing Stripe price ID for plan." }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (!priceId) {
+      return jsonResponse(
+        { error: "Missing stripe_price_id for this plan." },
+        400,
+        headers,
+      );
     }
 
-    const defaultBase = "https://cramerservices.github.io/Plans/#";
-    const successUrl = body.successUrl ?? `${defaultBase}/success?session_id={CHECKOUT_SESSION_ID}`;
-    const cancelUrl = body.cancelUrl ?? `${defaultBase}/checkout/${plan.id}`;
+    const base = "https://cramerservices.github.io/Plans/#";
+    const successUrl = body.successUrl ?? `${base}/success?session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = body.cancelUrl ?? `${base}/checkout/${plan.id}`;
 
-    // Stripe requires form-encoded body
+    // Stripe Checkout Sessions API (form-urlencoded)
     const params = new URLSearchParams();
     params.set("mode", "subscription");
     params.set("success_url", successUrl);
     params.set("cancel_url", cancelUrl);
 
-    if (body.customer?.email) params.set("customer_email", body.customer.email);
-
-    params.set("line_items[0][price]", stripePriceId);
+    // line item
+    params.set("line_items[0][price]", priceId);
     params.set("line_items[0][quantity]", "1");
 
-    // metadata
+    // helpful metadata (shows in Stripe dashboard)
     params.set("metadata[plan_id]", String(plan.id));
-    params.set("metadata[plan_name]", String(plan.name));
-    params.set("metadata[mini_split_heads]", isMiniSplit ? String(body.miniSplitHeads ?? "") : "");
-    params.set("metadata[customer_name]", body.customer?.name ?? "");
-    params.set("metadata[customer_phone]", body.customer?.phone ?? "");
-    params.set("metadata[service_line1]", body.serviceAddress?.line1 ?? "");
-    params.set("metadata[service_city]", body.serviceAddress?.city ?? "");
-    params.set("metadata[service_state]", body.serviceAddress?.state ?? "");
-    params.set("metadata[service_zip]", body.serviceAddress?.postal_code ?? "");
+    params.set("metadata[plan_name]", planName);
+    if (isMiniSplit) params.set("metadata[mini_split_heads]", String(body.miniSplitHeads ?? ""));
+    if (body.customerName) params.set("metadata[customer_name]", body.customerName);
+    if (body.customerPhone) params.set("metadata[customer_phone]", body.customerPhone);
+    if (body.streetAddress) params.set("metadata[address]", body.streetAddress);
+    if (body.city) params.set("metadata[city]", body.city);
+    if (body.state) params.set("metadata[state]", body.state);
+    if (body.zipCode) params.set("metadata[zip]", body.zipCode);
+    if (body.agreementSignedAt) params.set("metadata[agreement_signed_at]", body.agreementSignedAt);
+
+    // optional email
+    if (body.customerEmail) params.set("customer_email", body.customerEmail);
 
     const stripeRes = await fetch("https://api.stripe.com/v1/checkout/sessions", {
       method: "POST",
@@ -177,21 +198,19 @@ Deno.serve(async (req) => {
     const stripeJson = await stripeRes.json();
 
     if (!stripeRes.ok) {
-      return new Response(JSON.stringify({ error: "Stripe error", details: stripeJson }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse(
+        { error: "Stripe error", details: stripeJson },
+        500,
+        headers,
+      );
     }
 
-    return new Response(JSON.stringify({ url: stripeJson.url }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return jsonResponse({ url: stripeJson.url }, 200, headers);
   } catch (err) {
-    return new Response(JSON.stringify({ error: "Server error", details: String(err?.message ?? err) }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return jsonResponse(
+      { error: "Server error", details: String((err as Error)?.message ?? err) },
+      500,
+      headers,
+    );
   }
 });
-
