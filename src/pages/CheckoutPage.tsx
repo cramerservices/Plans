@@ -92,19 +92,29 @@ export default function CheckoutPage() {
   try {
     const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-checkout-session`;
 
-    const res = await fetch(functionUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-      },
-      body: JSON.stringify({
-        planId,
-        ...(isMiniSplit ? { miniSplitHeads } : {}), // <-- no nulls
-        ...formData,
-        agreementSignedAt: new Date().toISOString(),
-      }),
-    });
+    const { data: sessionData } = await supabase.auth.getSession();
+const token = sessionData.session?.access_token;
+
+if (!token) {
+  alert("Please sign in before checking out.");
+  return;
+}
+
+const res = await fetch(functionUrl, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${token}`,
+  },
+  body: JSON.stringify({
+    planId,
+    ...(isMiniSplit ? { miniSplitHeads } : {}),
+    ...formData,
+    agreementSignedAt: new Date().toISOString(),
+  }),
+});
+
 
     const json = await res.json();
 
