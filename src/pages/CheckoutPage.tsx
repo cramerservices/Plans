@@ -107,9 +107,7 @@ setProcessing(true);
   const res = await fetch(functionUrl, {
     method: 'POST',
 headers: {
-  "Content-Type": "application/json",
-  authorization: `Bearer ${accessToken}`,
-},
+  "Content-Type": "application/json"},
 
 
     body: JSON.stringify({
