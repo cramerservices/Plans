@@ -77,66 +77,57 @@ export default function CheckoutPage() {
   const selectedMiniSplitTier = getMiniSplitTier(miniSplitHeads);
   const displayedPrice = isMiniSplit ? selectedMiniSplitTier?.amount ?? plan?.price ?? 0 : plan?.price ?? 0;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+ const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
 
-    if (!agreedToTerms) {
-      alert('Please agree to the membership terms to continue.');
-      return;
-    }
-
- if (!user) {
-  setProcessing(false);
-  alert('Please log in or create an account first.');
-  navigate('/login');
-  return;
-}
-
-    if (isMiniSplit && !selectedMiniSplitTier) {
-      alert('Please select a valid mini split head count.');
-      return;
-    }
-
-setProcessing(true);
-
-
-
-  // Call the edge function with fetch so the Authorization header is guaranteed
-  const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-checkout-session`;
-
-  const res = await fetch(functionUrl, {
-    method: 'POST',
-headers: {
-  "Content-Type": "application/json"},
-
-
-    body: JSON.stringify({
-      planId,
-      miniSplitHeads: isMiniSplit ? miniSplitHeads : null,
-      ...formData,
-      agreementSignedAt: new Date().toISOString(),
-    }),
-  });
-
-  const json = await res.json();
-
-  if (!res.ok) {
-    console.error('Edge function error:', json);
-    throw new Error(json?.error || json?.message || 'Edge function request failed');
+  if (!agreedToTerms) {
+    alert('Please agree to the membership terms to continue.');
+    return;
   }
 
-  if (!json?.url) {
-    throw new Error('Stripe checkout URL was not returned.');
+  if (isMiniSplit && !selectedMiniSplitTier) {
+    alert('Please select a valid mini split head count.');
+    return;
   }
 
-  window.location.href = json.url;
-} catch (error) {
-  console.error('Error creating checkout session:', error);
-  alert('There was an error starting Stripe checkout. Make sure Stripe is configured and try again.');
-  setProcessing(false);
-}
+  setProcessing(true);
 
-  };
+  try {
+    const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-checkout-session`;
+
+    const res = await fetch(functionUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({
+        planId,
+        ...(isMiniSplit ? { miniSplitHeads } : {}), // <-- no nulls
+        ...formData,
+        agreementSignedAt: new Date().toISOString(),
+      }),
+    });
+
+    const json = await res.json();
+
+    if (!res.ok) {
+      console.error('Edge function error:', json);
+      throw new Error(json?.error || json?.message || 'Edge function request failed');
+    }
+
+    if (!json?.url) {
+      throw new Error('Stripe checkout URL was not returned.');
+    }
+
+    window.location.href = json.url;
+  } catch (error) {
+    console.error('Error creating checkout session:', error);
+    alert('There was an error starting Stripe checkout. Make sure Stripe is configured and try again.');
+  } finally {
+    setProcessing(false);
+  }
+};
 
   if (loading) {
     return (
