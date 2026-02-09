@@ -87,32 +87,40 @@ export default function CheckoutPage() {
     return;
   }
 
+  if (!planId) {
+    alert('Missing planId.');
+    return;
+  }
+
   setProcessing(true);
 
   try {
     const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-checkout-session`;
 
     const { data: sessionData } = await supabase.auth.getSession();
-const token = sessionData.session?.access_token;
+    const token = sessionData.session?.access_token;
 
-if (!token) {
-  alert("Please sign in before checking out.");
-  return;
-}
+    if (!token) {
+      alert('Please sign in before checking out.');
+      return;
+    }
 
-const res = await fetch(functionUrl, {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-    // (add this too if JWT verification is ON)
-    // Authorization: `Bearer ${token}`,
-  },
-  body: JSON.stringify(payload),
-});
+    const payload = {
+      planId,
+      ...formData,
+      agreementSignedAt: new Date().toISOString(),
+      ...(isMiniSplit ? { miniSplitHeads } : {}),
+    };
 
-});
-
+    const res = await fetch(functionUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
 
     const json = await res.json();
 
@@ -133,6 +141,7 @@ const res = await fetch(functionUrl, {
     setProcessing(false);
   }
 };
+
 
   if (loading) {
     return (
