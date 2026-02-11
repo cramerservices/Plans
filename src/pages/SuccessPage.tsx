@@ -17,10 +17,11 @@ export default function SuccessPage() {
 
     (async () => {
       try {
-        const { data, error } = await supabase.functions.invoke("finalize-checkout", {
-          body: { sessionId },
-        });
-        if (error) throw error;
+const { error } = await supabase.functions.invoke("finalize-checkout", {
+  body: { sessionId },
+});
+if (error) throw error;
+
 
         setMsg("All set! Redirecting to your dashboard...");
         setTimeout(() => navigate("/dashboard"), 800);
