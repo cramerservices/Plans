@@ -7,7 +7,7 @@ import LoginPage from './pages/LoginPage';
 import CustomerDashboard from './pages/CustomerDashboard';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
-import SuccessPage from './pages/SuccessPage'; 
+import SuccessPage from './pages/SuccessPage';  
 
 
 
