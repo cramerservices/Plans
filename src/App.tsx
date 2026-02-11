@@ -7,6 +7,9 @@ import LoginPage from './pages/LoginPage';
 import CustomerDashboard from './pages/CustomerDashboard';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
+import SuccessPage from './pages/SuccessPage';
+
+
 
 function App() {
   return (
@@ -24,6 +27,15 @@ function App() {
             </ProtectedRoute>
           }
         />
+        // ...
+<Route
+  path="/success"
+  element={
+    <ProtectedRoute>
+      <SuccessPage />
+    </ProtectedRoute>
+  }
+/>
         <Route
           path="/admin/*"
           element={
