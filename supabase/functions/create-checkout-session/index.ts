@@ -5,6 +5,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 type RequestBody = {
   planId: string;
   miniSplitHeads?: number; // only needed if your plan is "mini split"
+
   // optional customer/service info
   customerName?: string;
   customerEmail?: string;
@@ -40,7 +41,11 @@ function corsHeaders(origin: string | null) {
   };
 }
 
-function jsonResponse(body: unknown, status = 200, extraHeaders: Record<string, string> = {}) {
+function jsonResponse(
+  body: unknown,
+  status = 200,
+  extraHeaders: Record<string, string> = {},
+) {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
@@ -82,14 +87,37 @@ Deno.serve(async (req) => {
     const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
 
-    if (!STRIPE_SECRET_KEY || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    if (!STRIPE_SECRET_KEY || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !SUPABASE_ANON_KEY) {
       return jsonResponse(
-        { error: "Missing env vars. Need STRIPE_SECRET_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY." },
+        {
+          error:
+            "Missing env vars. Need STRIPE_SECRET_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY.",
+        },
         500,
         headers,
       );
     }
+
+    // ✅ NEW: get the logged-in user from the Bearer token
+    const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization") ?? "";
+    if (!authHeader.startsWith("Bearer ")) {
+      return jsonResponse({ error: "Missing Authorization Bearer token" }, 401, headers);
+    }
+
+    const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    const { data: userData, error: userErr } = await supabaseAuth.auth.getUser();
+    const user = userData?.user;
+
+    if (userErr || !user) {
+      return jsonResponse({ error: "Invalid user session" }, 401, headers);
+    }
+
+    const userId = user.id;
 
     const body = (await req.json()) as RequestBody;
 
@@ -97,6 +125,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "planId is required" }, 400, headers);
     }
 
+    // Service role client for DB reads (plan lookup)
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Adjust selected columns if your table differs
@@ -150,11 +179,7 @@ Deno.serve(async (req) => {
     }
 
     if (!priceId) {
-      return jsonResponse(
-        { error: "Missing stripe_price_id for this plan." },
-        400,
-        headers,
-      );
+      return jsonResponse({ error: "Missing stripe_price_id for this plan." }, 400, headers);
     }
 
     const base = "https://cramerservices.github.io/Plans/#";
@@ -171,9 +196,13 @@ Deno.serve(async (req) => {
     params.set("line_items[0][price]", priceId);
     params.set("line_items[0][quantity]", "1");
 
+    // ✅ NEW: user id in metadata (this is the fix)
+    params.set("metadata[user_id]", userId);
+
     // helpful metadata (shows in Stripe dashboard)
     params.set("metadata[plan_id]", String(plan.id));
     params.set("metadata[plan_name]", planName);
+
     if (isMiniSplit) params.set("metadata[mini_split_heads]", String(body.miniSplitHeads ?? ""));
     if (body.customerName) params.set("metadata[customer_name]", body.customerName);
     if (body.customerPhone) params.set("metadata[customer_phone]", body.customerPhone);
@@ -183,8 +212,10 @@ Deno.serve(async (req) => {
     if (body.zipCode) params.set("metadata[zip]", body.zipCode);
     if (body.agreementSignedAt) params.set("metadata[agreement_signed_at]", body.agreementSignedAt);
 
-    // optional email
-    if (body.customerEmail) params.set("customer_email", body.customerEmail);
+    // optional email:
+    // prefer the email passed in; otherwise fall back to the logged-in Supabase user email
+    const email = body.customerEmail ?? user.email ?? null;
+    if (email) params.set("customer_email", email);
 
     const stripeRes = await fetch("https://api.stripe.com/v1/checkout/sessions", {
       method: "POST",
@@ -198,11 +229,7 @@ Deno.serve(async (req) => {
     const stripeJson = await stripeRes.json();
 
     if (!stripeRes.ok) {
-      return jsonResponse(
-        { error: "Stripe error", details: stripeJson },
-        500,
-        headers,
-      );
+      return jsonResponse({ error: "Stripe error", details: stripeJson }, 500, headers);
     }
 
     return jsonResponse({ url: stripeJson.url }, 200, headers);
