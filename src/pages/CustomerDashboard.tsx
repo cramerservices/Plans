@@ -20,7 +20,7 @@ export default function CustomerDashboard() {
   const [contactError, setContactError] = useState<string | null>(null);
   const [contactSuccess, setContactSuccess] = useState<string | null>(null);
 
-  // NEW: PDF open/loading per service row
+  // PDF open/loading per service row
   const [openingPdfId, setOpeningPdfId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -30,7 +30,6 @@ export default function CustomerDashboard() {
   }, [user]);
 
   useEffect(() => {
-    // When customer loads/changes, sync form fields
     if (customer) {
       setContactForm({
         email: customer.email ?? '',
@@ -80,7 +79,6 @@ export default function CustomerDashboard() {
   const activeMembership = memberships.find((m) => m.status === 'active');
 
   const isValidEmail = (email: string) => {
-    // simple + practical email check
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   };
 
@@ -100,7 +98,6 @@ export default function CustomerDashboard() {
 
     setContactSaving(true);
     try {
-      // 1) Update portal profile fields
       const { data: updatedCustomer, error: updErr } = await supabase
         .from('portal_customers')
         .update({
@@ -115,18 +112,15 @@ export default function CustomerDashboard() {
 
       setCustomer(updatedCustomer);
 
-      // 2) If email changed, also update Supabase Auth email (login email)
-      // This usually triggers an email confirmation depending on your auth settings.
+      // If email changed, also update Supabase Auth email
       const currentAuthEmail = (user.email ?? '').trim().toLowerCase();
       if (currentAuthEmail && currentAuthEmail !== nextEmail) {
         const { error: authErr } = await supabase.auth.updateUser({ email: nextEmail });
         if (authErr) {
-          // Profile saved, but auth email update failed
           setContactSuccess('Saved. (Note: login email update failed — check Supabase auth settings.)');
           setIsEditingContact(false);
           return;
         }
-
         setContactSuccess('Saved. Check your email to confirm the address change (if prompted).');
       } else {
         setContactSuccess('Saved.');
@@ -145,7 +139,6 @@ export default function CustomerDashboard() {
     setContactError(null);
     setContactSuccess(null);
     setIsEditingContact(false);
-    // reset to latest customer values
     if (customer) {
       setContactForm({
         email: customer.email ?? '',
@@ -154,10 +147,8 @@ export default function CustomerDashboard() {
     }
   };
 
-  // NEW: open a private PDF for a service row using signed URL (bucket = service-docs)
+  // Private PDF open via signed URL
   const handleOpenInspectionPdf = async (service: ServiceCompleted) => {
-    // Your DB column is named pdf_path (text). If your TS type doesn’t include it yet,
-    // update your ServiceCompleted type to include: pdf_path?: string | null
     const pdfPath = (service as any)?.pdf_path as string | null | undefined;
     if (!pdfPath) return;
 
@@ -312,7 +303,6 @@ export default function CustomerDashboard() {
                               </div>
                             )}
 
-                            {/* NEW: PDF link */}
                             {hasPdf && (
                               <button
                                 type="button"
@@ -426,7 +416,6 @@ export default function CustomerDashboard() {
             )}
 
             <div className={styles.contactInfo}>
-              {/* EMAIL (editable) */}
               <div className={styles.contactItem}>
                 <span>Email:</span>
                 {!isEditingContact ? (
@@ -441,7 +430,6 @@ export default function CustomerDashboard() {
                 )}
               </div>
 
-              {/* PHONE (editable) */}
               <div className={styles.contactItem}>
                 <span>Phone:</span>
                 {!isEditingContact ? (
@@ -457,7 +445,6 @@ export default function CustomerDashboard() {
                 )}
               </div>
 
-              {/* SERVICE ADDRESS (read-only always) */}
               <div className={styles.contactItem}>
                 <span>Service Address:</span>
                 <strong>
