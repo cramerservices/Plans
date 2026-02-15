@@ -1,5 +1,6 @@
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+
 import HomePage from './pages/HomePage';
 import PlansPage from './pages/PlansPage';
 import CheckoutPage from './pages/CheckoutPage';
@@ -7,18 +8,23 @@ import LoginPage from './pages/LoginPage';
 import CustomerDashboard from './pages/CustomerDashboard';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
-import SuccessPage from './pages/SuccessPage';  
-
-
+import SuccessPage from './pages/SuccessPage';
 
 function App() {
   return (
     <AuthProvider>
       <Routes>
+        {/* Public */}
         <Route path="/" element={<HomePage />} />
         <Route path="/plans" element={<PlansPage />} />
-        <Route path="/checkout/:planId" element={<CheckoutPage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/success" element={<SuccessPage />} />
+
+        {/* Checkout (support both patterns) */}
+        <Route path="/checkout" element={<CheckoutPage />} />
+        <Route path="/checkout/:planId" element={<CheckoutPage />} />
+
+        {/* Customer dashboard (must be logged in) */}
         <Route
           path="/dashboard"
           element={
@@ -27,15 +33,8 @@ function App() {
             </ProtectedRoute>
           }
         />
-        // ...
-<Route
-  path="/success"
-  element={
-    <ProtectedRoute>
-      <SuccessPage />
-    </ProtectedRoute>
-  }
-/>
+
+        {/* Admin routes (must be logged in + admin) */}
         <Route
           path="/admin/*"
           element={
@@ -44,9 +43,13 @@ function App() {
             </ProtectedRoute>
           }
         />
+
+        {/* Fallback */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AuthProvider>
   );
 }
 
 export default App;
+
