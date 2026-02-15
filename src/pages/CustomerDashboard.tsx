@@ -20,6 +20,9 @@ export default function CustomerDashboard() {
   const [contactError, setContactError] = useState<string | null>(null);
   const [contactSuccess, setContactSuccess] = useState<string | null>(null);
 
+  // NEW: PDF open/loading per service row
+  const [openingPdfId, setOpeningPdfId] = useState<string | null>(null);
+
   useEffect(() => {
     if (user) {
       fetchDashboardData();
@@ -151,6 +154,32 @@ export default function CustomerDashboard() {
     }
   };
 
+  // NEW: open a private PDF for a service row using signed URL (bucket = service-docs)
+  const handleOpenInspectionPdf = async (service: ServiceCompleted) => {
+    // Your DB column is named pdf_path (text). If your TS type doesn’t include it yet,
+    // update your ServiceCompleted type to include: pdf_path?: string | null
+    const pdfPath = (service as any)?.pdf_path as string | null | undefined;
+    if (!pdfPath) return;
+
+    setOpeningPdfId(service.id);
+    try {
+      const { data, error } = await supabase
+        .storage
+        .from('service-docs')
+        .createSignedUrl(pdfPath, 60 * 5); // 5 minutes
+
+      if (error) throw error;
+      if (!data?.signedUrl) throw new Error('No signed URL returned');
+
+      window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+    } catch (e: any) {
+      console.error('Failed to open PDF:', e);
+      alert(e?.message ?? 'Could not open the inspection PDF.');
+    } finally {
+      setOpeningPdfId(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className={styles.page}>
@@ -259,67 +288,87 @@ export default function CustomerDashboard() {
                 </div>
               ) : (
                 <div className={styles.servicesList}>
-                  {services.map((service) => (
-                    <div key={service.id} className={styles.serviceCard}>
-                      <div className={styles.serviceHeader}>
-                        <div>
-                          <h3 className={styles.serviceType}>{service.service_type}</h3>
-                          <p className={styles.serviceDate}>
-                            {new Date(service.service_date).toLocaleDateString('en-US', {
-                              year: 'numeric',
-                              month: 'long',
-                              day: 'numeric',
-                            })}
-                          </p>
+                  {services.map((service) => {
+                    const hasPdf = !!(service as any)?.pdf_path;
+
+                    return (
+                      <div key={service.id} className={styles.serviceCard}>
+                        <div className={styles.serviceHeader}>
+                          <div>
+                            <h3 className={styles.serviceType}>{service.service_type}</h3>
+                            <p className={styles.serviceDate}>
+                              {new Date(service.service_date).toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                              })}
+                            </p>
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+                            {service.technician_name && (
+                              <div className={styles.technician}>
+                                Technician: {service.technician_name}
+                              </div>
+                            )}
+
+                            {/* NEW: PDF link */}
+                            {hasPdf && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenInspectionPdf(service)}
+                                className={styles.plansButton}
+                                style={{ padding: '8px 12px' }}
+                                disabled={openingPdfId === service.id}
+                              >
+                                {openingPdfId === service.id ? 'Opening…' : 'Look at your inspection here'}
+                              </button>
+                            )}
+                          </div>
                         </div>
-                        {service.technician_name && (
-                          <div className={styles.technician}>
-                            Technician: {service.technician_name}
+
+                        {service.summary && (
+                          <div className={styles.serviceSummary}>
+                            <strong>Summary:</strong>
+                            <p>{service.summary}</p>
+                          </div>
+                        )}
+
+                        {service.work_completed && (service.work_completed as any)?.length > 0 && (
+                          <div className={styles.workCompleted}>
+                            <strong>Work Completed:</strong>
+                            <ul>
+                              {(service.work_completed as any).map((item: any, index: number) => (
+                                <li key={index}>
+                                  {item.task}
+                                  {item.notes && <span className={styles.notes}> - {item.notes}</span>}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {service.recommendations && (service.recommendations as any)?.length > 0 && (
+                          <div className={styles.recommendations}>
+                            <strong>Recommendations:</strong>
+                            <ul>
+                              {(service.recommendations as any).map((rec: any, index: number) => (
+                                <li key={index} className={styles[`priority-${rec.priority}`]}>
+                                  <span className={styles.recTitle}>{rec.title}</span>
+                                  <span className={styles.recDesc}>{rec.description}</span>
+                                  {rec.estimated_cost && (
+                                    <span className={styles.recCost}>
+                                      Est. ${rec.estimated_cost}
+                                    </span>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
                           </div>
                         )}
                       </div>
-
-                      {service.summary && (
-                        <div className={styles.serviceSummary}>
-                          <strong>Summary:</strong>
-                          <p>{service.summary}</p>
-                        </div>
-                      )}
-
-                      {service.work_completed && service.work_completed.length > 0 && (
-                        <div className={styles.workCompleted}>
-                          <strong>Work Completed:</strong>
-                          <ul>
-                            {service.work_completed.map((item, index) => (
-                              <li key={index}>
-                                {item.task}
-                                {item.notes && <span className={styles.notes}> - {item.notes}</span>}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      {service.recommendations && service.recommendations.length > 0 && (
-                        <div className={styles.recommendations}>
-                          <strong>Recommendations:</strong>
-                          <ul>
-                            {service.recommendations.map((rec, index) => (
-                              <li key={index} className={styles[`priority-${rec.priority}`]}>
-                                <span className={styles.recTitle}>{rec.title}</span>
-                                <span className={styles.recDesc}>{rec.description}</span>
-                                {rec.estimated_cost && (
-                                  <span className={styles.recCost}>
-                                    Est. ${rec.estimated_cost}
-                                  </span>
-                                )}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
