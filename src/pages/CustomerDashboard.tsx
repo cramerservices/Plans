@@ -6,11 +6,28 @@ import { CustomerMembership, ServiceCompleted, Customer } from '../types';
 import styles from './CustomerDashboard.module.css';
 import { Link } from "react-router-dom";
 
+
+type ServiceDoc = {
+  id: string;
+  inspection_id: string;
+  customer_name?: string | null;
+  customer_email?: string | null;
+  technician_name?: string | null;
+  report_url: string;
+  created_at: string;
+  customer_id?: string | null;
+  service_date?: string | null;
+  service_type?: string | null;
+  storage_path?: string | null;
+};
+
+
 export default function CustomerDashboard() {
   const { user } = useAuth();
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [memberships, setMemberships] = useState<CustomerMembership[]>([]);
   const [services, setServices] = useState<ServiceCompleted[]>([]);
+  const [serviceDocs, setServiceDocs] = useState<ServiceDoc[]>([]);
   const [loading, setLoading] = useState(true);
 
   // ---- Contact edit state ----
@@ -40,7 +57,7 @@ export default function CustomerDashboard() {
 
   const fetchDashboardData = async () => {
     try {
-      const [customerResult, membershipsResult, servicesResult] = await Promise.all([
+      const [customerResult, membershipsResult, servicesResult, docsResult] = await Promise.all([
         supabase
           .from('portal_customers')
           .select('*')
@@ -60,15 +77,23 @@ export default function CustomerDashboard() {
           .eq('customer_id', user?.id)
           .order('service_date', { ascending: false })
           .limit(10),
+        supabase
+          .from('service_docs')
+          .select('*')
+          .eq('customer_id', user?.id)
+          .order('service_date', { ascending: false })
+          .limit(10),
       ]);
 
       if (customerResult.error) throw customerResult.error;
       if (membershipsResult.error) throw membershipsResult.error;
       if (servicesResult.error) throw servicesResult.error;
+      if (docsResult.error) throw docsResult.error;
 
       setCustomer(customerResult.data);
       setMemberships(membershipsResult.data || []);
       setServices(servicesResult.data || []);
+      setServiceDocs((docsResult.data as any) || []);
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     } finally {
@@ -169,6 +194,42 @@ export default function CustomerDashboard() {
     } finally {
       setOpeningPdfId(null);
     }
+  // Open Tune-Up report PDF from service_docs (report_url or signed URL from storage_path)
+  const handleOpenServiceDocPdf = async (doc: ServiceDoc) => {
+    const reportUrl = doc.report_url || '';
+    const storagePath = doc.storage_path || '';
+
+    // If report_url looks like a real URL, open it
+    if (reportUrl && /^https?:\/\//i.test(reportUrl)) {
+      window.open(reportUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    // Otherwise, fall back to signed URL from storage_path
+    if (!storagePath) {
+      alert('No PDF path found for this report.');
+      return;
+    }
+
+    setOpeningPdfId(doc.id);
+    try {
+      const { data, error } = await supabase
+        .storage
+        .from('service-docs')
+        .createSignedUrl(storagePath, 60 * 5);
+
+      if (error) throw error;
+      if (!data?.signedUrl) throw new Error('No signed URL returned');
+
+      window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+    } catch (e: any) {
+      console.error('Failed to open PDF:', e);
+      alert(e?.message ?? 'Could not open the report PDF.');
+    } finally {
+      setOpeningPdfId(null);
+    }
+  };
+
   };
 
   if (loading) {
@@ -265,6 +326,55 @@ export default function CustomerDashboard() {
                   </div>
                 ))}
               </div>
+            </div>
+
+            <div className={styles.card}>
+              <h2 className={styles.cardTitle}>Tune-Up Reports</h2>
+
+              {serviceDocs.length === 0 ? (
+                <div className={styles.emptyState}>
+                  <p>No tune-up reports uploaded yet.</p>
+                </div>
+              ) : (
+                <div className={styles.servicesList}>
+                  {serviceDocs.map((doc) => (
+                    <div key={doc.id} className={styles.serviceCard}>
+                      <div className={styles.serviceHeader}>
+                        <div>
+                          <h3 className={styles.serviceType}>{doc.service_type || 'tune-up'}</h3>
+                          <p className={styles.serviceDate}>
+                            {doc.service_date
+                              ? new Date(doc.service_date).toLocaleDateString('en-US', {
+                                  year: 'numeric',
+                                  month: 'long',
+                                  day: 'numeric',
+                                })
+                              : '—'}
+                          </p>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+                          {doc.technician_name && (
+                            <div className={styles.technician}>
+                              Technician: {doc.technician_name}
+                            </div>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => handleOpenServiceDocPdf(doc)}
+                            className={styles.plansButton}
+                            style={{ padding: '8px 12px' }}
+                            disabled={openingPdfId === doc.id}
+                          >
+                            {openingPdfId === doc.id ? 'Opening…' : 'View Report PDF'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className={styles.card}>
