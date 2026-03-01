@@ -380,103 +380,172 @@ export default function CustomerDashboard() {
             <div className={styles.card}>
               <h2 className={styles.cardTitle}>Service History</h2>
 
-              {services.length === 0 ? (
-                <div className={styles.emptyState}>
-                  <p>No services completed yet.</p>
-                  <p className={styles.emptyStateNote}>
-                    Your service history will appear here after your first tune-up.
-                  </p>
-                </div>
-              ) : (
-                <div className={styles.servicesList}>
-                  {services.map((service) => {
-                    const hasPdf = !!(service as any)?.pdf_path;
+              {(() => {
+                const history = [
+                  ...services.map((service) => ({
+                    source: 'services_completed' as const,
+                    sortDate: service.service_date,
+                    service,
+                  })),
+                  ...serviceDocs.map((doc) => ({
+                    source: 'service_docs' as const,
+                    sortDate: (doc.service_date as any) || (doc.created_at as any) || null,
+                    doc,
+                  })),
+                ].sort((a, b) => {
+                  const ad = a.sortDate ? new Date(a.sortDate).getTime() : 0;
+                  const bd = b.sortDate ? new Date(b.sortDate).getTime() : 0;
+                  return bd - ad;
+                });
 
-                    return (
-                      <div key={service.id} className={styles.serviceCard}>
-                        <div className={styles.serviceHeader}>
-                          <div>
-                            <h3 className={styles.serviceType}>{service.service_type}</h3>
-                            <p className={styles.serviceDate}>
-                              {new Date(service.service_date).toLocaleDateString('en-US', {
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric',
-                              })}
-                            </p>
-                          </div>
+                if (history.length === 0) {
+                  return (
+                    <div className={styles.emptyState}>
+                      <p>No services completed yet.</p>
+                      <p className={styles.emptyStateNote}>
+                        Your service history will appear here after your first tune-up.
+                      </p>
+                    </div>
+                  );
+                }
 
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
-                            {service.technician_name && (
-                              <div className={styles.technician}>
-                                Technician: {service.technician_name}
+                return (
+                  <div className={styles.servicesList}>
+                    {history.map((item) => {
+                      if (item.source === 'services_completed') {
+                        const service = item.service;
+                        const hasPdf = !!(service as any)?.pdf_path;
+
+                        return (
+                          <div key={`sc_${service.id}`} className={styles.serviceCard}>
+                            <div className={styles.serviceHeader}>
+                              <div>
+                                <h3 className={styles.serviceType}>{service.service_type}</h3>
+                                <p className={styles.serviceDate}>
+                                  {new Date(service.service_date).toLocaleDateString('en-US', {
+                                    year: 'numeric',
+                                    month: 'long',
+                                    day: 'numeric',
+                                  })}
+                                </p>
+                              </div>
+
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+                                {service.technician_name && (
+                                  <div className={styles.technician}>
+                                    Technician: {service.technician_name}
+                                  </div>
+                                )}
+
+                                {hasPdf && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenInspectionPdf(service)}
+                                    className={styles.plansButton}
+                                    style={{ padding: '8px 12px' }}
+                                    disabled={openingPdfId === service.id}
+                                  >
+                                    {openingPdfId === service.id ? 'Opening…' : 'Look at your inspection here'}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            {service.summary && (
+                              <div className={styles.serviceSummary}>
+                                <strong>Summary:</strong>
+                                <p>{service.summary}</p>
                               </div>
                             )}
 
-                            {hasPdf && (
-                              <button
-                                type="button"
-                                onClick={() => handleOpenInspectionPdf(service)}
-                                className={styles.plansButton}
-                                style={{ padding: '8px 12px' }}
-                                disabled={openingPdfId === service.id}
-                              >
-                                {openingPdfId === service.id ? 'Opening…' : 'Look at your inspection here'}
-                              </button>
+                            {service.work_completed && (service.work_completed as any)?.length > 0 && (
+                              <div className={styles.workCompleted}>
+                                <strong>Work Completed:</strong>
+                                <ul>
+                                  {(service.work_completed as any).map((item: any, index: number) => (
+                                    <li key={index}>
+                                      {item.task}
+                                      {item.notes && <span className={styles.notes}> - {item.notes}</span>}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {service.recommendations && (service.recommendations as any)?.length > 0 && (
+                              <div className={styles.recommendations}>
+                                <strong>Recommendations:</strong>
+                                <ul>
+                                  {(service.recommendations as any).map((rec: any, index: number) => (
+                                    <li key={index} className={styles[`priority-${rec.priority}`]}>
+                                      <span className={styles.recTitle}>{rec.title}</span>
+                                      <span className={styles.recDesc}>{rec.description}</span>
+                                      {rec.estimated_cost && (
+                                        <span className={styles.recCost}>
+                                          Est. ${rec.estimated_cost}
+                                        </span>
+                                      )}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
                             )}
                           </div>
+                        );
+                      }
+
+                      const doc = item.doc;
+                      const hasDocPdf = !!(doc.report_url || doc.storage_path);
+
+                      return (
+                        <div key={`sd_${doc.id}`} className={styles.serviceCard}>
+                          <div className={styles.serviceHeader}>
+                            <div>
+                              <h3 className={styles.serviceType}>
+                                {(doc.service_type as any) || 'Tune-Up'}
+                              </h3>
+                              <p className={styles.serviceDate}>
+                                {doc.service_date
+                                  ? new Date(doc.service_date).toLocaleDateString('en-US', {
+                                      year: 'numeric',
+                                      month: 'long',
+                                      day: 'numeric',
+                                    })
+                                  : new Date(doc.created_at).toLocaleDateString('en-US', {
+                                      year: 'numeric',
+                                      month: 'long',
+                                      day: 'numeric',
+                                    })}
+                              </p>
+                            </div>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+                              {doc.technician_name && (
+                                <div className={styles.technician}>
+                                  Technician: {doc.technician_name}
+                                </div>
+                              )}
+
+                              {hasDocPdf && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenServiceDocPdf(doc)}
+                                  className={styles.plansButton}
+                                  style={{ padding: '8px 12px' }}
+                                  disabled={openingPdfId === doc.id}
+                                >
+                                  {openingPdfId === doc.id ? 'Opening…' : 'Look at your inspection here'}
+                                </button>
+                              )}
+                            </div>
+                          </div>
                         </div>
-
-                        {service.summary && (
-                          <div className={styles.serviceSummary}>
-                            <strong>Summary:</strong>
-                            <p>{service.summary}</p>
-                          </div>
-                        )}
-
-                        {service.work_completed && (service.work_completed as any)?.length > 0 && (
-                          <div className={styles.workCompleted}>
-                            <strong>Work Completed:</strong>
-                            <ul>
-                              {(service.work_completed as any).map((item: any, index: number) => (
-                                <li key={index}>
-                                  {item.task}
-                                  {item.notes && <span className={styles.notes}> - {item.notes}</span>}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-
-                        {service.recommendations && (service.recommendations as any)?.length > 0 && (
-                          <div className={styles.recommendations}>
-                            <strong>Recommendations:</strong>
-                            <ul>
-                              {(service.recommendations as any).map((rec: any, index: number) => (
-                                <li key={index} className={styles[`priority-${rec.priority}`]}>
-                                  <span className={styles.recTitle}>{rec.title}</span>
-                                  <span className={styles.recDesc}>{rec.description}</span>
-                                  {rec.estimated_cost && (
-                                    <span className={styles.recCost}>
-                                      Est. ${rec.estimated_cost}
-                                    </span>
-                                  )}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </>
-        )}
-
-        {customer && (
-          <div className={styles.card}>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div><div className={styles.card}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
               <h2 className={styles.cardTitle} style={{ margin: 0 }}>Contact Information</h2>
 
