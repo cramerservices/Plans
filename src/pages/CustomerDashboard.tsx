@@ -194,6 +194,8 @@ export default function CustomerDashboard() {
     } finally {
       setOpeningPdfId(null);
     }
+  };
+
   // Open Tune-Up report PDF from service_docs (report_url or signed URL from storage_path)
   const handleOpenServiceDocPdf = async (doc: ServiceDoc) => {
     const reportUrl = doc.report_url || '';
@@ -230,7 +232,6 @@ export default function CustomerDashboard() {
     }
   };
 
-  };
 
   if (loading) {
     return (
@@ -377,61 +378,76 @@ export default function CustomerDashboard() {
               )}
             </div>
 
-                        <div className={styles.card}>
-              <h2 className={styles.cardTitle}>Service History</h2>
+           <div className={styles.card}>
+  <h2 className={styles.cardTitle}>Service History</h2>
 
-              {(() => {
-                const history = [
-                  ...services.map((service) => ({
-                    kind: 'service' as const,
-                    id: service.id,
-                    date: service.service_date,
-                    service,
-                  })),
-                  ...serviceDocs.map((doc) => ({
-                    kind: 'doc' as const,
-                    id: doc.id,
-                    date: (doc.service_date as any) || (doc.created_at as any),
-                    doc,
-                  })),
-                ].sort((a, b) => {
-                  const ad = a.date ? new Date(a.date).getTime() : 0;
-                  const bd = b.date ? new Date(b.date).getTime() : 0;
-                  return bd - ad;
-                });
+  {(() => {
+    const history = [
+      ...services.map((s) => ({
+        id: s.id,
+        service_type: s.service_type,
+        service_date: s.service_date,
+        technician_name: s.technician_name,
+        pdf_handler: () => handleOpenInspectionPdf(s),
+      })),
+      ...serviceDocs.map((d) => ({
+        id: d.id,
+        service_type: d.service_type || "tuneup",
+        service_date: d.service_date,
+        technician_name: d.technician_name,
+        pdf_handler: () => handleOpenServiceDocPdf(d),
+      })),
+    ]
+      .filter((x) => x.service_date)
+      .sort(
+        (a, b) =>
+          new Date(b.service_date!).getTime() -
+          new Date(a.service_date!).getTime()
+      );
 
-                if (history.length === 0) {
-                  return (
-                    <div className={styles.emptyState}>
-                      <p>No services completed yet.</p>
-                      <p className={styles.emptyStateNote}>
-                        Your service history will appear here after your first tune-up.
-                      </p>
-                    </div>
-                  );
-                }
+    if (history.length === 0) {
+      return (
+        <div className={styles.emptyState}>
+          <p>No services completed yet.</p>
+          <p className={styles.emptyStateNote}>
+            Your service history will appear here after your first tune-up.
+          </p>
+        </div>
+      );
+    }
 
-                return (
-                  <div className={styles.servicesList}>
-                    {history.map((item) => {
-                      if (item.kind === 'service') {
-                        const service = item.service;
-                        const hasPdf = !!(service as any)?.pdf_path;
+    return (
+      <div className={styles.servicesList}>
+        {history.map((item) => (
+          <div key={item.id} className={styles.serviceCard}>
+            <div className={styles.serviceHeader}>
+              <div>
+                <h3 className={styles.serviceType}>
+                  {item.service_type}
+                </h3>
+                <p className={styles.serviceDate}>
+                  {new Date(item.service_date!).toLocaleDateString()}
+                </p>
+                {item.technician_name && (
+                  <p className={styles.serviceTech}>
+                    Technician: {item.technician_name}
+                  </p>
+                )}
+              </div>
 
-                        return (
-                          <div key={`sc_${service.id}`} className={styles.serviceCard}>
-                            <div className={styles.serviceHeader}>
-                              <div>
-                                <h3 className={styles.serviceType}>{service.service_type}</h3>
-                                <p className={styles.serviceDate}>
-                                  {new Date(service.service_date).toLocaleDateString('en-US', {
-                                    year: 'numeric',
-                                    month: 'long',
-                                    day: 'numeric',
-                                  })}
-                                </p>
-                              </div>
-
+              <button
+                onClick={item.pdf_handler}
+                className={styles.pdfButton}
+              >
+                View PDF
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  })()}
+</div>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
                                 {service.technician_name && (
                                   <div className={styles.technician}>
@@ -464,10 +480,10 @@ export default function CustomerDashboard() {
                               <div className={styles.workCompleted}>
                                 <strong>Work Completed:</strong>
                                 <ul>
-                                  {(service.work_completed as any).map((w: any, index: number) => (
+                                  {(service.work_completed as any).map((item: any, index: number) => (
                                     <li key={index}>
-                                      {w.task}
-                                      {w.notes && <span className={styles.notes}> - {w.notes}</span>}
+                                      {item.task}
+                                      {item.notes && <span className={styles.notes}> - {item.notes}</span>}
                                     </li>
                                   ))}
                                 </ul>
@@ -503,13 +519,21 @@ export default function CustomerDashboard() {
                         <div key={`sd_${doc.id}`} className={styles.serviceCard}>
                           <div className={styles.serviceHeader}>
                             <div>
-                              <h3 className={styles.serviceType}>{doc.service_type || 'tune-up'}</h3>
+                              <h3 className={styles.serviceType}>
+                                {(doc.service_type as any) || 'Tune-Up'}
+                              </h3>
                               <p className={styles.serviceDate}>
-                                {(doc.service_date ? new Date(doc.service_date) : new Date(doc.created_at)).toLocaleDateString('en-US', {
-                                  year: 'numeric',
-                                  month: 'long',
-                                  day: 'numeric',
-                                })}
+                                {doc.service_date
+                                  ? new Date(doc.service_date).toLocaleDateString('en-US', {
+                                      year: 'numeric',
+                                      month: 'long',
+                                      day: 'numeric',
+                                    })
+                                  : new Date(doc.created_at).toLocaleDateString('en-US', {
+                                      year: 'numeric',
+                                      month: 'long',
+                                      day: 'numeric',
+                                    })}
                               </p>
                             </div>
 
@@ -539,9 +563,7 @@ export default function CustomerDashboard() {
                   </div>
                 );
               })()}
-            </div>
-
-<div className={styles.card}>
+            </div><div className={styles.card}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
               <h2 className={styles.cardTitle} style={{ margin: 0 }}>Contact Information</h2>
 
