@@ -501,7 +501,7 @@ export default function CustomerDashboard() {
               <div className={styles.contactItem}>
                 <span>Email:</span>
                 {!isEditingContact ? (
-                  <strong>{customer.email}</strong>
+                  <strong>{customer?.email || 'Not provided'}</strong>
                 ) : (
                   <input
                     value={contactForm.email}
@@ -515,7 +515,7 @@ export default function CustomerDashboard() {
               <div className={styles.contactItem}>
                 <span>Phone:</span>
                 {!isEditingContact ? (
-                  <strong>{customer.phone || 'Not provided'}</strong>
+                  <strong>{customer?.phone || 'Not provided'}</strong>
                 ) : (
                   <input
                     value={contactForm.phone}
@@ -530,7 +530,13 @@ export default function CustomerDashboard() {
               <div className={styles.contactItem}>
                 <span>Service Address:</span>
                 <strong>
-                  {customer.service_address}, {customer.city}, {customer.state} {customer.zip_code}
+                  {customer?.service_address ? (
+                    <>
+                      {customer.service_address}, {customer.city}, {customer.state} {customer.zip_code}
+                    </>
+                  ) : (
+                    'Not provided'
+                  )}
                 </strong>
               </div>
             </div>
