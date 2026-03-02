@@ -1,11 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { CustomerMembership, ServiceCompleted, Customer } from '../types';
 import styles from './CustomerDashboard.module.css';
-import { Link } from "react-router-dom";
-
 
 type ServiceDoc = {
   id: string;
@@ -21,9 +20,18 @@ type ServiceDoc = {
   storage_path?: string | null;
 };
 
+function titleCaseServiceType(raw: string | null | undefined) {
+  if (!raw) return 'Service';
+  return raw
+    .toString()
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 export default function CustomerDashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
+
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [memberships, setMemberships] = useState<CustomerMembership[]>([]);
   const [services, setServices] = useState<ServiceCompleted[]>([]);
@@ -37,259 +45,153 @@ export default function CustomerDashboard() {
   const [contactError, setContactError] = useState<string | null>(null);
   const [contactSuccess, setContactSuccess] = useState<string | null>(null);
 
-  // PDF open/loading per service row
-  const [openingPdfId, setOpeningPdfId] = useState<string | null>(null);
+  // ---- CRM action state ----
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionBusyId, setActionBusyId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user) {
-      fetchDashboardData();
-    }
-  }, [user]);
-
-  useEffect(() => {
-    if (customer) {
-      setContactForm({
-        email: customer.email ?? '',
-        phone: customer.phone ?? '',
-      });
-    }
-  }, [customer]);
-
-  const fetchDashboardData = async () => {
-    try {
-      const [customerResult, membershipsResult, servicesResult, docsResult] = await Promise.all([
-        supabase
-          .from('portal_customers')
-          .select('*')
-          .eq('id', user?.id)
-          .maybeSingle(),
-        supabase
-          .from('customer_memberships')
-          .select(`
-            *,
-            plan:maintenance_plans(*)
-          `)
-          .eq('customer_id', user?.id)
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('services_completed')
-          .select('*')
-          .eq('customer_id', user?.id)
-          .order('service_date', { ascending: false })
-          .limit(10),
-        supabase
-          .from('service_docs')
-          .select('*')
-          .eq('customer_id', user?.id)
-          .order('service_date', { ascending: false })
-          .limit(10),
-      ]);
-
-      if (customerResult.error) throw customerResult.error;
-      if (membershipsResult.error) throw membershipsResult.error;
-      if (servicesResult.error) throw servicesResult.error;
-      if (docsResult.error) throw docsResult.error;
-
-      setCustomer(customerResult.data);
-      setMemberships(membershipsResult.data || []);
-      setServices(servicesResult.data || []);
-      setServiceDocs((docsResult.data as any) || []);
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const activeMembership = memberships.find((m) => m.status === 'active');
-
-  const isValidEmail = (email: string) => {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-  };
-
-  const prettyServiceType = (value?: string | null) => {
-    const raw = (value ?? '').trim();
-    if (!raw) return 'Service';
-    // Convert hot_water_tank -> Hot Water Tank
-    const spaced = raw.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
-    return spaced
-      .toLowerCase()
-      .split(' ')
-      .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
-      .join(' ');
-  };
-
-
-  const handleSaveContact = async () => {
     if (!user?.id) return;
 
-    setContactError(null);
-    setContactSuccess(null);
+    const load = async () => {
+      try {
+        setLoading(true);
 
-    const nextEmail = contactForm.email.trim().toLowerCase();
-    const nextPhone = (contactForm.phone ?? '').trim();
+        // Customer profile
+        const { data: customerData } = await supabase
+          .from('portal_customers')
+          .select('*')
+          .eq('id', user.id)
+          .maybeSingle();
 
-    if (!nextEmail || !isValidEmail(nextEmail)) {
-      setContactError('Please enter a valid email address.');
-      return;
-    }
+        setCustomer((customerData as any) ?? null);
+        setContactForm({
+          email: (customerData as any)?.email || '',
+          phone: (customerData as any)?.phone || '',
+        });
 
-    setContactSaving(true);
-    try {
-      const { data: updatedCustomer, error: updErr } = await supabase
-        .from('portal_customers')
-        .update({
-          email: nextEmail,
-          phone: nextPhone,
-        })
-        .eq('id', user.id)
-        .select('*')
-        .single();
+        // Memberships
+        const { data: membershipsData } = await supabase
+          .from('customer_memberships')
+          .select('*, plan:maintenance_plans(*)')
+          .eq('customer_id', user.id)
+          .order('created_at', { ascending: false });
 
-      if (updErr) throw updErr;
+        setMemberships((membershipsData as any) || []);
 
-      setCustomer(updatedCustomer);
+        // Service history (services_completed)
+        const { data: servicesData } = await supabase
+          .from('services_completed')
+          .select('*')
+          .eq('customer_id', user.id)
+          .order('service_date', { ascending: false });
 
-      // If email changed, also update Supabase Auth email
-      const currentAuthEmail = (user.email ?? '').trim().toLowerCase();
-      if (currentAuthEmail && currentAuthEmail !== nextEmail) {
-        const { error: authErr } = await supabase.auth.updateUser({ email: nextEmail });
-        if (authErr) {
-          setContactSuccess('Saved. (Note: login email update failed — check Supabase auth settings.)');
-          setIsEditingContact(false);
-          return;
-        }
-        setContactSuccess('Saved. Check your email to confirm the address change (if prompted).');
-      } else {
-        setContactSuccess('Saved.');
+        setServices((servicesData as any) || []);
+
+        // Tune-up reports (service_docs)
+        const { data: docsData } = await supabase
+          .from('service_docs')
+          .select('*')
+          .eq('customer_id', user.id)
+          .order('created_at', { ascending: false });
+
+        setServiceDocs((docsData as any) || []);
+      } finally {
+        setLoading(false);
       }
+    };
 
-      setIsEditingContact(false);
-    } catch (e: any) {
-      console.error('Contact update error:', e);
-      setContactError(e?.message ?? 'Failed to update contact info.');
-    } finally {
-      setContactSaving(false);
-    }
-  };
+    load();
+  }, [user?.id]);
 
-  const handleCancelContact = () => {
+  const activeMembership = useMemo(() => {
+    return memberships.find((m: any) => m.status === 'active') || null;
+  }, [memberships]);
+
+  const saveContact = async () => {
+    if (!user?.id) return;
+    setContactSaving(true);
     setContactError(null);
     setContactSuccess(null);
-    setIsEditingContact(false);
-    if (customer) {
-      setContactForm({
-        email: customer.email ?? '',
-        phone: customer.phone ?? '',
-      });
-    }
-  };
-
-  // Private PDF open via signed URL
-  const handleOpenInspectionPdf = async (service: ServiceCompleted) => {
-    const pdfPath = (service as any)?.pdf_path as string | null | undefined;
-    if (!pdfPath) return;
-
-    setOpeningPdfId(service.id);
-    try {
-      const { data, error } = await supabase
-        .storage
-        .from('service-docs')
-        .createSignedUrl(pdfPath, 60 * 5); // 5 minutes
-
-      if (error) throw error;
-      if (!data?.signedUrl) throw new Error('No signed URL returned');
-
-      window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
-    } catch (e: any) {
-      console.error('Failed to open PDF:', e);
-      alert(e?.message ?? 'Could not open the inspection PDF.');
-    } finally {
-      setOpeningPdfId(null);
-    }
-  };
-
-
-  const updateServiceApproval = async (serviceId: string, approved: boolean) => {
-    const svc = services.find(s => s.id === serviceId);
-    if (!svc) return;
-
-    const currentPayload = (svc as any)?.payload || {};
-    const nextPayload = { ...currentPayload, approved };
 
     const { error } = await supabase
-      .from('services_completed')
-      .update({ payload: nextPayload })
-      .eq('id', serviceId);
+      .from('portal_customers')
+      .update({
+        email: contactForm.email,
+        phone: contactForm.phone,
+      })
+      .eq('id', user.id);
+
+    setContactSaving(false);
 
     if (error) {
-      console.error('Failed to update approval:', error);
-      alert('Failed to update approval');
+      setContactError(error.message);
       return;
     }
 
-    // Update UI without a full refetch
-    setServices(prev => prev.map(s => (s.id === serviceId ? ({ ...s, payload: nextPayload } as any) : s)));
+    setContactSuccess('Saved.');
+    setIsEditingContact(false);
+
+    // refresh local
+    setCustomer((prev) =>
+      prev
+        ? ({
+            ...prev,
+            email: contactForm.email,
+            phone: contactForm.phone,
+          } as any)
+        : prev
+    );
   };
 
-  const handlePayInvoice = (invoiceId: string) => {
-    // Route this to your existing payment/checkout flow.
-    // If you already have a Checkout page, keep this URL consistent with your router.
-    window.location.href = `/checkout?invoiceId=${encodeURIComponent(invoiceId)}`;
-  };
-
-
-  // Open Tune-Up report PDF from service_docs (report_url or signed URL from storage_path)
-  const handleOpenServiceDocPdf = async (doc: ServiceDoc) => {
-    const reportUrl = doc.report_url || '';
-    const storagePath = doc.storage_path || '';
-
-    // If report_url looks like a real URL, open it
-    if (reportUrl && /^https?:\/\//i.test(reportUrl)) {
-      window.open(reportUrl, '_blank', 'noopener,noreferrer');
-      return;
-    }
-
-    // Otherwise, fall back to signed URL from storage_path
-    if (!storagePath) {
-      alert('No PDF path found for this report.');
-      return;
-    }
-
-    setOpeningPdfId(doc.id);
+  const updateServiceApproval = async (serviceId: string, approved: boolean) => {
+    setActionError(null);
+    setActionBusyId(serviceId);
     try {
-      const { data, error } = await supabase
-        .storage
-        .from('service-docs')
-        .createSignedUrl(storagePath, 60 * 5);
+      const current = services.find((s) => s.id === serviceId) as any;
+      const payload = (current?.payload ?? {}) as any;
+      const nextPayload = { ...payload, approved };
+
+      const { error } = await supabase
+        .from('services_completed')
+        .update({ payload: nextPayload })
+        .eq('id', serviceId);
 
       if (error) throw error;
-      if (!data?.signedUrl) throw new Error('No signed URL returned');
 
-      window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+      setServices((prev) =>
+        prev.map((s: any) => (s.id === serviceId ? { ...s, payload: nextPayload } : s))
+      );
     } catch (e: any) {
-      console.error('Failed to open PDF:', e);
-      alert(e?.message ?? 'Could not open the report PDF.');
+      setActionError(e?.message || 'Failed to update');
     } finally {
-      setOpeningPdfId(null);
+      setActionBusyId(null);
     }
   };
 
+  const handlePayInvoice = (invoiceId: string | undefined | null) => {
+    if (!invoiceId) return;
+    // Route to whatever Stripe/checkout flow you already have.
+    navigate(`/checkout?invoiceId=${encodeURIComponent(invoiceId)}`);
+  };
+
+  const handleOpenServiceDocPdf = (doc: ServiceDoc) => {
+    if (doc.report_url) window.open(doc.report_url, '_blank', 'noopener,noreferrer');
+  };
 
   if (loading) {
     return (
-      <div className={styles.page}>
+      <div className={styles.container}>
         <Header />
-        <div className={styles.loading}>Loading your dashboard...</div>
+        <div className={styles.loading}>Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className={styles.page}>
+    <div className={styles.container}>
       <Header />
 
-      <div className={styles.container}>
+      <div className={styles.content}>
         <div className={styles.header}>
           <div>
             <h1 className={styles.title}>Welcome back, {customer?.full_name || 'Customer'}!</h1>
@@ -311,27 +213,27 @@ export default function CustomerDashboard() {
               <div className={styles.card}>
                 <h2 className={styles.cardTitle}>Current Membership</h2>
                 <div className={styles.membershipInfo}>
-                  <div className={styles.planName}>{activeMembership.plan?.name}</div>
+                  <div className={styles.planName}>{(activeMembership as any).plan?.name}</div>
                   <div className={styles.planStatus}>
-                    <span className={styles.statusBadge}>{activeMembership.status}</span>
+                    <span className={styles.statusBadge}>{(activeMembership as any).status}</span>
                   </div>
 
                   <div className={styles.membershipDetails}>
                     <div className={styles.detailRow}>
                       <span>Plan Type:</span>
-                      <strong>{activeMembership.plan?.name}</strong>
+                      <strong>{(activeMembership as any).plan?.name}</strong>
                     </div>
                     <div className={styles.detailRow}>
                       <span>Start Date:</span>
-                      <strong>{new Date(activeMembership.start_date).toLocaleDateString()}</strong>
+                      <strong>{new Date((activeMembership as any).start_date).toLocaleDateString()}</strong>
                     </div>
                     <div className={styles.detailRow}>
                       <span>End Date:</span>
-                      <strong>{new Date(activeMembership.end_date).toLocaleDateString()}</strong>
+                      <strong>{new Date((activeMembership as any).end_date).toLocaleDateString()}</strong>
                     </div>
                     <div className={styles.detailRow}>
                       <span>Discount on Repairs:</span>
-                      <strong>{activeMembership.plan?.discount_percentage}%</strong>
+                      <strong>{(activeMembership as any).plan?.discount_percentage}%</strong>
                     </div>
                   </div>
                 </div>
@@ -341,21 +243,19 @@ export default function CustomerDashboard() {
                 <h2 className={styles.cardTitle}>Benefits Remaining</h2>
                 <div className={styles.benefits}>
                   <div className={styles.benefitItem}>
-                    <div className={styles.benefitNumber}>{activeMembership.tune_ups_remaining}</div>
+                    <div className={styles.benefitNumber}>{(activeMembership as any).tune_ups_remaining}</div>
                     <div className={styles.benefitLabel}>
-                      Tune-Up{activeMembership.tune_ups_remaining !== 1 ? 's' : ''} Remaining
+                      Tune-Up{(activeMembership as any).tune_ups_remaining !== 1 ? 's' : ''} Remaining
                     </div>
                   </div>
 
-                  {activeMembership.plan?.priority_service && (
+                  {(activeMembership as any).plan?.priority_service && (
                     <div className={styles.benefitBadge}>
                       <span>✓</span> Priority Service Active
                     </div>
                   )}
 
-                  <div className={styles.benefitNote}>
-                    Ready to schedule your next tune-up? Call us at (555) 123-4567
-                  </div>
+                  <div className={styles.benefitNote}>Ready to schedule your next tune-up? Call us at (555) 123-4567</div>
                 </div>
               </div>
             </div>
@@ -363,7 +263,7 @@ export default function CustomerDashboard() {
             <div className={styles.card}>
               <h2 className={styles.cardTitle}>Plan Features</h2>
               <div className={styles.featuresList}>
-                {activeMembership.plan?.features.map((feature, index) => (
+                {(activeMembership as any).plan?.features?.map((feature: string, index: number) => (
                   <div key={index} className={styles.featureItem}>
                     <span className={styles.checkIcon}>✓</span>
                     {feature}
@@ -372,12 +272,13 @@ export default function CustomerDashboard() {
               </div>
             </div>
 
+            {/* Tune-up reports */}
             <div className={styles.card}>
               <h2 className={styles.cardTitle}>Tune-Up Reports</h2>
-
               {serviceDocs.length === 0 ? (
                 <div className={styles.emptyState}>
-                  <p>No tune-up reports uploaded yet.</p>
+                  <p>No tune-up reports yet.</p>
+                  <p className={styles.emptyStateNote}>Your tune-up reports will appear here after your first tune-up.</p>
                 </div>
               ) : (
                 <div className={styles.servicesList}>
@@ -385,7 +286,7 @@ export default function CustomerDashboard() {
                     <div key={doc.id} className={styles.serviceCard}>
                       <div className={styles.serviceHeader}>
                         <div>
-                          <h3 className={styles.serviceType}>{prettyServiceType(doc.service_type || 'tune-up')}</h3>
+                          <h3 className={styles.serviceType}>{titleCaseServiceType(doc.service_type)}</h3>
                           <p className={styles.serviceDate}>
                             {doc.service_date
                               ? new Date(doc.service_date).toLocaleDateString('en-US', {
@@ -393,24 +294,18 @@ export default function CustomerDashboard() {
                                   month: 'long',
                                   day: 'numeric',
                                 })
-                              : '—'}
+                              : new Date(doc.created_at).toLocaleDateString('en-US', {
+                                  year: 'numeric',
+                                  month: 'long',
+                                  day: 'numeric',
+                                })}
                           </p>
                         </div>
 
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
-                          {doc.technician_name && (
-                            <div className={styles.technician}>
-                              Technician: {doc.technician_name}
-                            </div>
-                          )}
-
-                          <button
-                            type="button"
-                            onClick={() => handleOpenServiceDocPdf(doc)}
-                            className={styles.pdfButton}
-                            disabled={openingPdfId === doc.id}
-                          >
-                            {openingPdfId === doc.id ? 'Opening…' : 'View Report PDF'}
+                        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                          {doc.technician_name && <span className={styles.techBadge}>Technician: {doc.technician_name}</span>}
+                          <button type="button" className={styles.pdfButton} onClick={() => handleOpenServiceDocPdf(doc)}>
+                            View Report PDF
                           </button>
                         </div>
                       </div>
@@ -420,278 +315,225 @@ export default function CustomerDashboard() {
               )}
             </div>
 
-           <div className={styles.card}>
-  <h2 className={styles.cardTitle}>Service History</h2>
-
-  {services.length === 0 ? (
-    <div className={styles.emptyState}>
-      <p>No services completed yet.</p>
-      <p className={styles.emptyStateNote}>
-        Your service history will appear here after your first service.
-      </p>
-    </div>
-  ) : (
-    <div className={styles.servicesList}>
-      {services.map((service) => {
-        const payload = ((service as any)?.payload ?? {}) as any;
-        const kind = (payload.kind || service.service_type || '').toString();
-
-        // Invoice / Estimate entries coming from CRM
-        if (kind === 'invoice') {
-          const invoiceNumber = payload.invoice_number || 'Invoice';
-          const amountDue = Number(payload.amount_due ?? 0);
-          const status = (payload.status || 'open').toString();
-          const approved = payload.approved as boolean | null | undefined;
-
-          return (
-            <div key={service.id} className={styles.serviceCard}>
-              <div className={styles.serviceHeader}>
-                <div>
-                  <h3 className={styles.serviceType}>{`Invoice ${invoiceNumber}`}</h3>
-                  <p className={styles.serviceDate}>
-                    {new Date(service.service_date).toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                    })}
-                  </p>
-                  {service.technician_name && (
-                    <p className={styles.serviceTech}>Technician: {service.technician_name}</p>
-                  )}
-                  <p className={styles.serviceTech}>
-                    Status: {status} • Amount Due: ${amountDue.toFixed(2)}
-                  </p>
-                </div>
-
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                  {approved == null ? (
-                    <>
-                      <button
-                        type="button"
-                        className={styles.secondaryButton}
-                        onClick={() => updateServiceApproval(service.id, false)}
-                      >
-                        Decline
-                      </button>
-                      <button
-                        type="button"
-                        className={styles.pdfButton}
-                        onClick={() => updateServiceApproval(service.id, true)}
-                      >
-                        Approve
-                      </button>
-                    </>
-                  ) : approved === false ? (
-                    <span className={styles.badge}>Declined</span>
-                  ) : (
-                    <>
-                      <span className={styles.badge}>Approved</span>
-                      <button
-                        type="button"
-                        className={styles.pdfButton}
-                        onClick={() => handlePayInvoice(payload.invoice_id)}
-                        disabled={!payload.invoice_id || amountDue <= 0}
-                        title={!payload.invoice_id ? 'Missing invoice id' : undefined}
-                      >
-                        {amountDue <= 0 ? 'Paid' : 'Pay Now'}
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        }
-
-        if (kind === 'estimate') {
-          const estimateNumber = payload.estimate_number || 'Estimate';
-          const totalAmount = Number(payload.total_amount ?? 0);
-          const status = (payload.status || 'draft').toString();
-          const approved = payload.approved as boolean | null | undefined;
-
-          return (
-            <div key={service.id} className={styles.serviceCard}>
-              <div className={styles.serviceHeader}>
-                <div>
-                  <h3 className={styles.serviceType}>{`Estimate ${estimateNumber}`}</h3>
-                  <p className={styles.serviceDate}>
-                    {new Date(service.service_date).toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                    })}
-                  </p>
-                  {service.technician_name && (
-                    <p className={styles.serviceTech}>Technician: {service.technician_name}</p>
-                  )}
-                  <p className={styles.serviceTech}>
-                    Status: {status} • Total: ${totalAmount.toFixed(2)}
-                  </p>
-                </div>
-
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                  {approved == null ? (
-                    <>
-                      <button
-                        type="button"
-                        className={styles.secondaryButton}
-                        onClick={() => updateServiceApproval(service.id, false)}
-                      >
-                        Decline
-                      </button>
-                      <button
-                        type="button"
-                        className={styles.pdfButton}
-                        onClick={() => updateServiceApproval(service.id, true)}
-                      >
-                        Approve
-                      </button>
-                    </>
-                  ) : approved === false ? (
-                    <span className={styles.badge}>Declined</span>
-                  ) : (
-                    <span className={styles.badge}>Approved</span>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        }
-
-        // Default rendering for any other future service types
-        const pdfPath = (service as any)?.pdf_path as string | null | undefined;
-        const hasPdf = !!pdfPath;
-
-        return (
-          <div key={service.id} className={styles.serviceCard}>
-            <div className={styles.serviceHeader}>
-              <div>
-                <h3 className={styles.serviceType}>
-                  {prettyServiceType(service.service_type)}
-                </h3>
-                <p className={styles.serviceDate}>
-                  {new Date(service.service_date).toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'numeric',
-                    day: 'numeric',
-                  })}
-                </p>
-                {service.technician_name && (
-                  <p className={styles.serviceTech}>
-                    Technician: {service.technician_name}
-                  </p>
-                )}
-              </div>
-
-              <button
-                type="button"
-                onClick={() => handleOpenInspectionPdf(service)}
-                className={styles.pdfButton}
-                disabled={!hasPdf || openingPdfId === service.id}
-                title={!hasPdf ? 'No PDF available for this service yet' : undefined}
-              >
-                {openingPdfId === service.id ? 'Opening…' : hasPdf ? 'View PDF' : 'No PDF'}
-              </button>
-            </div>
-          </div>
-        );
-      })}
-</div>
-
-
+            {/* Service History (CRM / other services) */}
             <div className={styles.card}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-              <h2 className={styles.cardTitle} style={{ margin: 0 }}>Contact Information</h2>
+              <h2 className={styles.cardTitle}>Service History</h2>
+              {actionError && <div className={styles.error}>{actionError}</div>}
 
-              {!isEditingContact ? (
-                <button
-                  className={styles.plansButton}
-                  onClick={() => {
-                    setContactError(null);
-                    setContactSuccess(null);
-                    setIsEditingContact(true);
-                  }}
-                  type="button"
-                >
-                  Edit
-                </button>
+              {services.length === 0 ? (
+                <div className={styles.emptyState}>
+                  <p>No service history yet.</p>
+                  <p className={styles.emptyStateNote}>Invoices, estimates, and other services will appear here.</p>
+                </div>
               ) : (
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button
-                    className={styles.plansButton}
-                    onClick={handleSaveContact}
-                    disabled={contactSaving}
-                    type="button"
-                  >
-                    {contactSaving ? 'Saving...' : 'Save'}
-                  </button>
-                  <button
-                    className={styles.plansButton}
-                    onClick={handleCancelContact}
-                    disabled={contactSaving}
-                    type="button"
-                  >
-                    Cancel
-                  </button>
+                <div className={styles.servicesList}>
+                  {services.map((s: any) => {
+                    const payload = (s.payload ?? {}) as any;
+                    const kind = (payload.kind || s.service_type || '').toString();
+
+                    const dateStr = new Date(s.service_date).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                    });
+
+                    if (kind === 'invoice') {
+                      const invoiceNumber = payload.invoice_number || '';
+                      const amountDue = Number(payload.amount_due ?? 0);
+                      const status = (payload.status || 'open').toString();
+                      const approved = payload.approved as boolean | null | undefined;
+
+                      return (
+                        <div key={s.id} className={styles.serviceCard}>
+                          <div className={styles.serviceHeader}>
+                            <div>
+                              <h3 className={styles.serviceType}>Invoice {invoiceNumber || ''}</h3>
+                              <p className={styles.serviceDate}>{dateStr}</p>
+                              <p className={styles.serviceTech}>
+                                Status: {status} • Amount Due: ${amountDue.toFixed(2)}
+                              </p>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                              {approved == null ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    className={styles.secondaryButton}
+                                    disabled={actionBusyId === s.id}
+                                    onClick={() => updateServiceApproval(s.id, false)}
+                                  >
+                                    Decline
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={styles.pdfButton}
+                                    disabled={actionBusyId === s.id}
+                                    onClick={() => updateServiceApproval(s.id, true)}
+                                  >
+                                    Approve
+                                  </button>
+                                </>
+                              ) : approved === false ? (
+                                <span className={styles.badge}>Declined</span>
+                              ) : (
+                                <>
+                                  <span className={styles.badge}>Approved</span>
+                                  <button
+                                    type="button"
+                                    className={styles.pdfButton}
+                                    onClick={() => handlePayInvoice(payload.invoice_id)}
+                                    disabled={!payload.invoice_id || amountDue <= 0}
+                                    title={!payload.invoice_id ? 'Missing invoice id' : undefined}
+                                  >
+                                    {amountDue <= 0 ? 'Paid' : 'Pay Now'}
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    if (kind === 'estimate') {
+                      const estimateNumber = payload.estimate_number || '';
+                      const totalAmount = Number(payload.total_amount ?? 0);
+                      const status = (payload.status || 'draft').toString();
+                      const approved = payload.approved as boolean | null | undefined;
+
+                      return (
+                        <div key={s.id} className={styles.serviceCard}>
+                          <div className={styles.serviceHeader}>
+                            <div>
+                              <h3 className={styles.serviceType}>Estimate {estimateNumber || ''}</h3>
+                              <p className={styles.serviceDate}>{dateStr}</p>
+                              <p className={styles.serviceTech}>
+                                Status: {status} • Total: ${totalAmount.toFixed(2)}
+                              </p>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                              {approved == null ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    className={styles.secondaryButton}
+                                    disabled={actionBusyId === s.id}
+                                    onClick={() => updateServiceApproval(s.id, false)}
+                                  >
+                                    Decline
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={styles.pdfButton}
+                                    disabled={actionBusyId === s.id}
+                                    onClick={() => updateServiceApproval(s.id, true)}
+                                  >
+                                    Approve
+                                  </button>
+                                </>
+                              ) : approved === false ? (
+                                <span className={styles.badge}>Declined</span>
+                              ) : (
+                                <span className={styles.badge}>Approved</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    // Fallback generic history row
+                    return (
+                      <div key={s.id} className={styles.serviceCard}>
+                        <div className={styles.serviceHeader}>
+                          <div>
+                            <h3 className={styles.serviceType}>{titleCaseServiceType(s.service_type)}</h3>
+                            <p className={styles.serviceDate}>{dateStr}</p>
+                            {s.summary && <p className={styles.serviceTech}>{s.summary}</p>}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
 
-            {contactError && (
-              <div style={{ marginTop: 10 }}>
-                <strong style={{ color: 'crimson' }}>{contactError}</strong>
-              </div>
-            )}
-            {contactSuccess && (
-              <div style={{ marginTop: 10 }}>
-                <strong style={{ color: 'green' }}>{contactSuccess}</strong>
-              </div>
-            )}
-
-            <div className={styles.contactInfo}>
-              <div className={styles.contactItem}>
-                <span>Email:</span>
+            {/* Contact information */}
+            <div className={styles.card}>
+              <div className={styles.cardHeaderRow}>
+                <h2 className={styles.cardTitle}>Contact Information</h2>
                 {!isEditingContact ? (
-                  <strong>{customer?.email || 'Not provided'}</strong>
+                  <button type="button" className={styles.secondaryButton} onClick={() => setIsEditingContact(true)}>
+                    Edit
+                  </button>
                 ) : (
-                  <input
-                    value={contactForm.email}
-                    onChange={(e) => setContactForm((p) => ({ ...p, email: e.target.value }))}
-                    type="email"
-                    style={{ width: 320, maxWidth: '100%' }}
-                  />
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <button
+                      type="button"
+                      className={styles.secondaryButton}
+                      onClick={() => {
+                        setIsEditingContact(false);
+                        setContactError(null);
+                        setContactSuccess(null);
+                        setContactForm({ email: customer?.email || '', phone: customer?.phone || '' });
+                      }}
+                      disabled={contactSaving}
+                    >
+                      Cancel
+                    </button>
+                    <button type="button" className={styles.pdfButton} onClick={saveContact} disabled={contactSaving}>
+                      {contactSaving ? 'Saving...' : 'Save'}
+                    </button>
+                  </div>
                 )}
               </div>
 
-              <div className={styles.contactItem}>
-                <span>Phone:</span>
-                {!isEditingContact ? (
-                  <strong>{customer?.phone || 'Not provided'}</strong>
-                ) : (
-                  <input
-                    value={contactForm.phone}
-                    onChange={(e) => setContactForm((p) => ({ ...p, phone: e.target.value }))}
-                    type="tel"
-                    placeholder="(555) 123-4567"
-                    style={{ width: 220, maxWidth: '100%' }}
-                  />
-                )}
-              </div>
+              {contactError && <div className={styles.error}>{contactError}</div>}
+              {contactSuccess && <div className={styles.success}>{contactSuccess}</div>}
 
-              <div className={styles.contactItem}>
-                <span>Service Address:</span>
-                <strong>
-                  {customer?.service_address ? (
-                    <>
-                      {customer.service_address}, {customer.city}, {customer.state} {customer.zip_code}
-                    </>
+              <div className={styles.contactInfo}>
+                <div className={styles.contactItem}>
+                  <span>Email:</span>
+                  {!isEditingContact ? (
+                    <strong>{customer?.email || 'Not provided'}</strong>
                   ) : (
-                    'Not provided'
+                    <input
+                      value={contactForm.email}
+                      onChange={(e) => setContactForm((p) => ({ ...p, email: e.target.value }))}
+                      type="email"
+                      style={{ width: 320, maxWidth: '100%' }}
+                    />
                   )}
-                </strong>
+                </div>
+
+                <div className={styles.contactItem}>
+                  <span>Phone:</span>
+                  {!isEditingContact ? (
+                    <strong>{customer?.phone || 'Not provided'}</strong>
+                  ) : (
+                    <input
+                      value={contactForm.phone}
+                      onChange={(e) => setContactForm((p) => ({ ...p, phone: e.target.value }))}
+                      type="tel"
+                      placeholder="(555) 123-4567"
+                      style={{ width: 220, maxWidth: '100%' }}
+                    />
+                  )}
+                </div>
+
+                <div className={styles.contactItem}>
+                  <span>Service Address:</span>
+                  <strong>
+                    {customer?.service_address
+                      ? `${customer.service_address}, ${customer.city}, ${customer.state} ${customer.zip_code}`
+                      : 'Not provided'}
+                  </strong>
+                </div>
               </div>
             </div>
-          </div>
           </>
         )}
       </div>
