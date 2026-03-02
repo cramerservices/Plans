@@ -209,6 +209,36 @@ export default function CustomerDashboard() {
     }
   };
 
+
+  const updateServiceApproval = async (serviceId: string, approved: boolean) => {
+    const svc = services.find(s => s.id === serviceId);
+    if (!svc) return;
+
+    const currentPayload = (svc as any)?.payload || {};
+    const nextPayload = { ...currentPayload, approved };
+
+    const { error } = await supabase
+      .from('services_completed')
+      .update({ payload: nextPayload })
+      .eq('id', serviceId);
+
+    if (error) {
+      console.error('Failed to update approval:', error);
+      alert('Failed to update approval');
+      return;
+    }
+
+    // Update UI without a full refetch
+    setServices(prev => prev.map(s => (s.id === serviceId ? ({ ...s, payload: nextPayload } as any) : s)));
+  };
+
+  const handlePayInvoice = (invoiceId: string) => {
+    // Route this to your existing payment/checkout flow.
+    // If you already have a Checkout page, keep this URL consistent with your router.
+    window.location.href = `/checkout?invoiceId=${encodeURIComponent(invoiceId)}`;
+  };
+
+
   // Open Tune-Up report PDF from service_docs (report_url or signed URL from storage_path)
   const handleOpenServiceDocPdf = async (doc: ServiceDoc) => {
     const reportUrl = doc.report_url || '';
@@ -403,6 +433,132 @@ export default function CustomerDashboard() {
   ) : (
     <div className={styles.servicesList}>
       {services.map((service) => {
+        const payload = ((service as any)?.payload ?? {}) as any;
+        const kind = (payload.kind || service.service_type || '').toString();
+
+        // Invoice / Estimate entries coming from CRM
+        if (kind === 'invoice') {
+          const invoiceNumber = payload.invoice_number || 'Invoice';
+          const amountDue = Number(payload.amount_due ?? 0);
+          const status = (payload.status || 'open').toString();
+          const approved = payload.approved as boolean | null | undefined;
+
+          return (
+            <div key={service.id} className={styles.serviceCard}>
+              <div className={styles.serviceHeader}>
+                <div>
+                  <h3 className={styles.serviceType}>{`Invoice ${invoiceNumber}`}</h3>
+                  <p className={styles.serviceDate}>
+                    {new Date(service.service_date).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                    })}
+                  </p>
+                  {service.technician_name && (
+                    <p className={styles.serviceTech}>Technician: {service.technician_name}</p>
+                  )}
+                  <p className={styles.serviceTech}>
+                    Status: {status} • Amount Due: ${amountDue.toFixed(2)}
+                  </p>
+                </div>
+
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  {approved == null ? (
+                    <>
+                      <button
+                        type="button"
+                        className={styles.secondaryButton}
+                        onClick={() => updateServiceApproval(service.id, false)}
+                      >
+                        Decline
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.pdfButton}
+                        onClick={() => updateServiceApproval(service.id, true)}
+                      >
+                        Approve
+                      </button>
+                    </>
+                  ) : approved === false ? (
+                    <span className={styles.badge}>Declined</span>
+                  ) : (
+                    <>
+                      <span className={styles.badge}>Approved</span>
+                      <button
+                        type="button"
+                        className={styles.pdfButton}
+                        onClick={() => handlePayInvoice(payload.invoice_id)}
+                        disabled={!payload.invoice_id || amountDue <= 0}
+                        title={!payload.invoice_id ? 'Missing invoice id' : undefined}
+                      >
+                        {amountDue <= 0 ? 'Paid' : 'Pay Now'}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        if (kind === 'estimate') {
+          const estimateNumber = payload.estimate_number || 'Estimate';
+          const totalAmount = Number(payload.total_amount ?? 0);
+          const status = (payload.status || 'draft').toString();
+          const approved = payload.approved as boolean | null | undefined;
+
+          return (
+            <div key={service.id} className={styles.serviceCard}>
+              <div className={styles.serviceHeader}>
+                <div>
+                  <h3 className={styles.serviceType}>{`Estimate ${estimateNumber}`}</h3>
+                  <p className={styles.serviceDate}>
+                    {new Date(service.service_date).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                    })}
+                  </p>
+                  {service.technician_name && (
+                    <p className={styles.serviceTech}>Technician: {service.technician_name}</p>
+                  )}
+                  <p className={styles.serviceTech}>
+                    Status: {status} • Total: ${totalAmount.toFixed(2)}
+                  </p>
+                </div>
+
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  {approved == null ? (
+                    <>
+                      <button
+                        type="button"
+                        className={styles.secondaryButton}
+                        onClick={() => updateServiceApproval(service.id, false)}
+                      >
+                        Decline
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.pdfButton}
+                        onClick={() => updateServiceApproval(service.id, true)}
+                      >
+                        Approve
+                      </button>
+                    </>
+                  ) : approved === false ? (
+                    <span className={styles.badge}>Declined</span>
+                  ) : (
+                    <span className={styles.badge}>Approved</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        // Default rendering for any other future service types
         const pdfPath = (service as any)?.pdf_path as string | null | undefined;
         const hasPdf = !!pdfPath;
 
@@ -440,8 +596,6 @@ export default function CustomerDashboard() {
           </div>
         );
       })}
-    </div>
-  )}
 </div>
 
 
