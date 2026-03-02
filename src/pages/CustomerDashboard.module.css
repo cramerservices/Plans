@@ -71,7 +71,7 @@
 .grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 1.5rem;
+  gap: 1rem;
   margin-bottom: 1.5rem;
 }
 
@@ -222,19 +222,25 @@
 }
 
 .serviceCard {
-  background: #f7fafc;
+  background: white;
   border: 1px solid #e2e8f0;
-  border-radius: 0.5rem;
-  padding: 1.5rem;
+  border-radius: 0.75rem;
+  padding: 1.25rem 1.25rem;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.serviceCard:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(16, 24, 40, 0.08);
+  border-color: #cbd5e0;
 }
 
 .serviceHeader {
   display: flex;
   justify-content: space-between;
-  align-items: start;
-  margin-bottom: 1rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid #e2e8f0;
+  align-items: center;
+  gap: 1rem;
 }
 
 .serviceType {
@@ -250,12 +256,13 @@
 }
 
 .technician {
-  background: white;
+  background: #f7fafc;
   border: 1px solid #e2e8f0;
-  padding: 0.5rem 1rem;
-  border-radius: 0.375rem;
-  font-size: 0.875rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.8125rem;
   color: #4a5568;
+  white-space: nowrap;
 }
 
 .serviceSummary,
@@ -393,35 +400,95 @@
 }
 
 
-/* --- CRM approval / status UI --- */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 10px;
-  border-radius: 999px;
+.pdfButton {
+  appearance: none;
+  border: 1px solid #2c5282;
+  background: #2c5282;
+  color: white;
+  padding: 0.6rem 0.9rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
   font-size: 0.875rem;
-  font-weight: 600;
-  background: #eef2ff;
-  color: #1e3a8a;
-  border: 1px solid #dbeafe;
-}
-
-.secondaryButton {
-  background: #ffffff;
-  color: #1f2937;
-  border: 1px solid #cbd5e1;
-  border-radius: 10px;
-  padding: 10px 14px;
-  font-size: 0.95rem;
-  font-weight: 600;
   cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
 
-.secondaryButton:hover {
-  background: #f8fafc;
+.pdfButton:hover {
+  background: #1a365d;
+  transform: translateY(-1px);
 }
 
-.secondaryButton:disabled {
+.pdfButton:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+  transform: none;
+}
+
+/* --- CRM action buttons (match existing style) --- */
+.actionRow {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.approveButton {
+  appearance: none;
+  border: 1px solid #48bb78;
+  background: #48bb78;
+  color: white;
+  padding: 0.55rem 0.8rem;
+  border-radius: 0.5rem;
+  font-weight: 700;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.approveButton:hover {
+  transform: translateY(-1px);
+}
+
+.declineButton {
+  appearance: none;
+  border: 1px solid #e2e8f0;
+  background: white;
+  color: #2d3748;
+  padding: 0.55rem 0.8rem;
+  border-radius: 0.5rem;
+  font-weight: 700;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.declineButton:hover {
+  transform: translateY(-1px);
+}
+
+.payButton {
+  appearance: none;
+  border: 1px solid #2c5282;
+  background: #2c5282;
+  color: white;
+  padding: 0.55rem 0.9rem;
+  border-radius: 0.5rem;
+  font-weight: 800;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.payButton:hover {
+  background: #1a365d;
+  transform: translateY(-1px);
+}
+
+.approveButton:disabled,
+.declineButton:disabled,
+.payButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
 }
