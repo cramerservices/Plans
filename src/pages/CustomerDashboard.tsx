@@ -107,6 +107,19 @@ export default function CustomerDashboard() {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   };
 
+  const prettyServiceType = (value?: string | null) => {
+    const raw = (value ?? '').trim();
+    if (!raw) return 'Service';
+    // Convert hot_water_tank -> Hot Water Tank
+    const spaced = raw.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+    return spaced
+      .toLowerCase()
+      .split(' ')
+      .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
+      .join(' ');
+  };
+
+
   const handleSaveContact = async () => {
     if (!user?.id) return;
 
@@ -342,7 +355,7 @@ export default function CustomerDashboard() {
                     <div key={doc.id} className={styles.serviceCard}>
                       <div className={styles.serviceHeader}>
                         <div>
-                          <h3 className={styles.serviceType}>{doc.service_type || 'tune-up'}</h3>
+                          <h3 className={styles.serviceType}>{prettyServiceType(doc.service_type || 'tune-up')}</h3>
                           <p className={styles.serviceDate}>
                             {doc.service_date
                               ? new Date(doc.service_date).toLocaleDateString('en-US', {
@@ -364,8 +377,7 @@ export default function CustomerDashboard() {
                           <button
                             type="button"
                             onClick={() => handleOpenServiceDocPdf(doc)}
-                            className={styles.plansButton}
-                            style={{ padding: '8px 12px' }}
+                            className={styles.pdfButton}
                             disabled={openingPdfId === doc.id}
                           >
                             {openingPdfId === doc.id ? 'Opening…' : 'View Report PDF'}
@@ -423,7 +435,7 @@ export default function CustomerDashboard() {
             <div className={styles.serviceHeader}>
               <div>
                 <h3 className={styles.serviceType}>
-                  {item.service_type}
+                  {prettyServiceType(item.service_type)}
                 </h3>
                 <p className={styles.serviceDate}>
                   {new Date(item.service_date!).toLocaleDateString()}
