@@ -131,7 +131,6 @@ export default function CustomerDashboard() {
     setContactSuccess('Saved.');
     setIsEditingContact(false);
 
-    // refresh local
     setCustomer((prev) =>
       prev
         ? ({
@@ -146,8 +145,9 @@ export default function CustomerDashboard() {
   const updateServiceApproval = async (serviceId: string, approved: boolean) => {
     setActionError(null);
     setActionBusyId(serviceId);
+
     try {
-      const current = services.find((s) => s.id === serviceId) as any;
+      const current = services.find((s) => (s as any).id === serviceId) as any;
       const payload = (current?.payload ?? {}) as any;
       const nextPayload = { ...payload, approved };
 
@@ -170,17 +170,18 @@ export default function CustomerDashboard() {
 
   const handlePayInvoice = (invoiceId: string | undefined | null) => {
     if (!invoiceId) return;
-    // Route to whatever Stripe/checkout flow you already have.
     navigate(`/checkout?invoiceId=${encodeURIComponent(invoiceId)}`);
   };
 
   const handleOpenServiceDocPdf = (doc: ServiceDoc) => {
     if (doc.report_url) window.open(doc.report_url, '_blank', 'noopener,noreferrer');
   };
-const handleOpenHistoryPdf = (url?: string | null) => {
-  if (!url) return;
-  window.open(url, '_blank', 'noopener,noreferrer');
-};
+
+  const handleOpenHistoryPdf = (url?: string | null) => {
+    if (!url) return;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
   if (loading) {
     return (
       <div className={styles.container}>
@@ -275,7 +276,6 @@ const handleOpenHistoryPdf = (url?: string | null) => {
               </div>
             </div>
 
-            {/* Tune-up reports */}
             <div className={styles.card}>
               <h2 className={styles.cardTitle}>Tune-Up Reports</h2>
               {serviceDocs.length === 0 ? (
@@ -318,7 +318,6 @@ const handleOpenHistoryPdf = (url?: string | null) => {
               )}
             </div>
 
-            {/* Service History (CRM / other services) */}
             <div className={styles.card}>
               <h2 className={styles.cardTitle}>Service History</h2>
               {actionError && <div className={styles.error}>{actionError}</div>}
@@ -333,6 +332,7 @@ const handleOpenHistoryPdf = (url?: string | null) => {
                   {services.map((s: any) => {
                     const payload = (s.payload ?? {}) as any;
                     const kind = (payload.kind || s.service_type || '').toString();
+                    const pdfUrl = s.pdf_path || payload.pdf_url || null;
 
                     const dateStr = new Date(s.service_date).toLocaleDateString('en-US', {
                       year: 'numeric',
@@ -357,9 +357,19 @@ const handleOpenHistoryPdf = (url?: string | null) => {
                               </p>
                             </div>
 
-                            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                               {approved == null ? (
                                 <>
+                                  {pdfUrl && (
+                                    <button
+                                      type="button"
+                                      className={styles.secondaryButton}
+                                      onClick={() => handleOpenHistoryPdf(pdfUrl)}
+                                    >
+                                      View PDF
+                                    </button>
+                                  )}
+
                                   <button
                                     type="button"
                                     className={styles.secondaryButton}
@@ -368,6 +378,7 @@ const handleOpenHistoryPdf = (url?: string | null) => {
                                   >
                                     Decline
                                   </button>
+
                                   <button
                                     type="button"
                                     className={styles.pdfButton}
@@ -378,10 +389,32 @@ const handleOpenHistoryPdf = (url?: string | null) => {
                                   </button>
                                 </>
                               ) : approved === false ? (
-                                <span className={styles.badge}>Declined</span>
+                                <>
+                                  <span className={styles.badge}>Declined</span>
+                                  {pdfUrl && (
+                                    <button
+                                      type="button"
+                                      className={styles.secondaryButton}
+                                      onClick={() => handleOpenHistoryPdf(pdfUrl)}
+                                    >
+                                      View PDF
+                                    </button>
+                                  )}
+                                </>
                               ) : (
                                 <>
                                   <span className={styles.badge}>Approved</span>
+
+                                  {pdfUrl && (
+                                    <button
+                                      type="button"
+                                      className={styles.secondaryButton}
+                                      onClick={() => handleOpenHistoryPdf(pdfUrl)}
+                                    >
+                                      View PDF
+                                    </button>
+                                  )}
+
                                   <button
                                     type="button"
                                     className={styles.pdfButton}
@@ -416,9 +449,19 @@ const handleOpenHistoryPdf = (url?: string | null) => {
                               </p>
                             </div>
 
-                            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                               {approved == null ? (
                                 <>
+                                  {pdfUrl && (
+                                    <button
+                                      type="button"
+                                      className={styles.secondaryButton}
+                                      onClick={() => handleOpenHistoryPdf(pdfUrl)}
+                                    >
+                                      View PDF
+                                    </button>
+                                  )}
+
                                   <button
                                     type="button"
                                     className={styles.secondaryButton}
@@ -427,6 +470,7 @@ const handleOpenHistoryPdf = (url?: string | null) => {
                                   >
                                     Decline
                                   </button>
+
                                   <button
                                     type="button"
                                     className={styles.pdfButton}
@@ -437,9 +481,31 @@ const handleOpenHistoryPdf = (url?: string | null) => {
                                   </button>
                                 </>
                               ) : approved === false ? (
-                                <span className={styles.badge}>Declined</span>
+                                <>
+                                  <span className={styles.badge}>Declined</span>
+                                  {pdfUrl && (
+                                    <button
+                                      type="button"
+                                      className={styles.secondaryButton}
+                                      onClick={() => handleOpenHistoryPdf(pdfUrl)}
+                                    >
+                                      View PDF
+                                    </button>
+                                  )}
+                                </>
                               ) : (
-                                <span className={styles.badge}>Approved</span>
+                                <>
+                                  <span className={styles.badge}>Approved</span>
+                                  {pdfUrl && (
+                                    <button
+                                      type="button"
+                                      className={styles.secondaryButton}
+                                      onClick={() => handleOpenHistoryPdf(pdfUrl)}
+                                    >
+                                      View PDF
+                                    </button>
+                                  )}
+                                </>
                               )}
                             </div>
                           </div>
@@ -447,7 +513,6 @@ const handleOpenHistoryPdf = (url?: string | null) => {
                       );
                     }
 
-                    // Fallback generic history row
                     return (
                       <div key={s.id} className={styles.serviceCard}>
                         <div className={styles.serviceHeader}>
@@ -456,6 +521,18 @@ const handleOpenHistoryPdf = (url?: string | null) => {
                             <p className={styles.serviceDate}>{dateStr}</p>
                             {s.summary && <p className={styles.serviceTech}>{s.summary}</p>}
                           </div>
+
+                          {pdfUrl && (
+                            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                              <button
+                                type="button"
+                                className={styles.secondaryButton}
+                                onClick={() => handleOpenHistoryPdf(pdfUrl)}
+                              >
+                                View PDF
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
@@ -464,7 +541,6 @@ const handleOpenHistoryPdf = (url?: string | null) => {
               )}
             </div>
 
-            {/* Contact information */}
             <div className={styles.card}>
               <div className={styles.cardHeaderRow}>
                 <h2 className={styles.cardTitle}>Contact Information</h2>
