@@ -177,7 +177,10 @@ export default function CustomerDashboard() {
   const handleOpenServiceDocPdf = (doc: ServiceDoc) => {
     if (doc.report_url) window.open(doc.report_url, '_blank', 'noopener,noreferrer');
   };
-
+const handleOpenHistoryPdf = (url?: string | null) => {
+  if (!url) return;
+  window.open(url, '_blank', 'noopener,noreferrer');
+};
   if (loading) {
     return (
       <div className={styles.container}>
