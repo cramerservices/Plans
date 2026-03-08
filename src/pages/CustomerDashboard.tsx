@@ -20,12 +20,25 @@ type ServiceDoc = {
   storage_path?: string | null;
 };
 
+type CrmCustomer = {
+  id: string;
+  portal_customer_id?: string | null;
+  email?: string | null;
+  name?: string | null;
+  phone?: string | null;
+  address?: string | null;
+};
+
 function titleCaseServiceType(raw: string | null | undefined) {
   if (!raw) return 'Service';
   return raw
     .toString()
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function normalizeEmail(email?: string | null) {
+  return (email || '').trim().toLowerCase();
 }
 
 export default function CustomerDashboard() {
@@ -56,12 +69,14 @@ export default function CustomerDashboard() {
       try {
         setLoading(true);
 
-        // Customer profile
-        const { data: customerData } = await supabase
+        // 1) Portal customer profile
+        const { data: customerData, error: customerError } = await supabase
           .from('portal_customers')
           .select('*')
           .eq('id', user.id)
           .maybeSingle();
+
+        if (customerError) throw customerError;
 
         setCustomer((customerData as any) ?? null);
         setContactForm({
@@ -69,32 +84,83 @@ export default function CustomerDashboard() {
           phone: (customerData as any)?.phone || '',
         });
 
-        // Memberships
-        const { data: membershipsData } = await supabase
+        // 2) Memberships
+        const { data: membershipsData, error: membershipsError } = await supabase
           .from('customer_memberships')
           .select('*, plan:maintenance_plans(*)')
           .eq('customer_id', user.id)
           .order('created_at', { ascending: false });
 
+        if (membershipsError) throw membershipsError;
+
         setMemberships((membershipsData as any) || []);
 
-        // Service history (services_completed)
-        const { data: servicesData } = await supabase
-          .from('services_completed')
-          .select('*')
-          .eq('customer_id', user.id)
-          .order('service_date', { ascending: false });
+        // 3) Find linked CRM customers
+        const portalEmail = normalizeEmail((customerData as any)?.email);
+        const crmCustomerIds = new Set<string>();
 
-        setServices((servicesData as any) || []);
+        // First: linked by portal_customer_id
+        const { data: linkedCrmCustomers, error: linkedCrmError } = await supabase
+          .from('customers')
+          .select('id, portal_customer_id, email, name, phone, address')
+          .eq('portal_customer_id', user.id);
 
-        // Tune-up reports (service_docs)
-        const { data: docsData } = await supabase
-          .from('service_docs')
-          .select('*')
-          .eq('customer_id', user.id)
-          .order('created_at', { ascending: false });
+        if (linkedCrmError) throw linkedCrmError;
 
-        setServiceDocs((docsData as any) || []);
+        ((linkedCrmCustomers as CrmCustomer[]) || []).forEach((c) => {
+          if (c?.id) crmCustomerIds.add(c.id);
+        });
+
+        // Second: fallback match by email if needed
+        if (portalEmail) {
+          const { data: emailMatchedCrmCustomers, error: emailCrmError } = await supabase
+            .from('customers')
+            .select('id, portal_customer_id, email, name, phone, address')
+            .eq('email', portalEmail);
+
+          if (emailCrmError) throw emailCrmError;
+
+          ((emailMatchedCrmCustomers as CrmCustomer[]) || []).forEach((c) => {
+            if (c?.id) crmCustomerIds.add(c.id);
+          });
+        }
+
+        // Include portal id too as fallback for any legacy rows
+        crmCustomerIds.add(user.id);
+
+        const customerIdList = Array.from(crmCustomerIds);
+
+        // 4) Service history (services_completed)
+        let servicesData: any[] = [];
+        if (customerIdList.length > 0) {
+          const { data, error } = await supabase
+            .from('services_completed')
+            .select('*')
+            .in('customer_id', customerIdList)
+            .order('service_date', { ascending: false });
+
+          if (error) throw error;
+          servicesData = data || [];
+        }
+
+        setServices(servicesData as any);
+
+        // 5) Tune-up reports (service_docs)
+        let docsData: any[] = [];
+        if (customerIdList.length > 0) {
+          const { data, error } = await supabase
+            .from('service_docs')
+            .select('*')
+            .in('customer_id', customerIdList)
+            .order('created_at', { ascending: false });
+
+          if (error) throw error;
+          docsData = data || [];
+        }
+
+        setServiceDocs(docsData as any);
+      } catch (err) {
+        console.error('Error loading dashboard:', err);
       } finally {
         setLoading(false);
       }
@@ -113,10 +179,12 @@ export default function CustomerDashboard() {
     setContactError(null);
     setContactSuccess(null);
 
+    const normalizedEmail = normalizeEmail(contactForm.email);
+
     const { error } = await supabase
       .from('portal_customers')
       .update({
-        email: contactForm.email,
+        email: normalizedEmail || null,
         phone: contactForm.phone,
       })
       .eq('id', user.id);
@@ -135,7 +203,7 @@ export default function CustomerDashboard() {
       prev
         ? ({
             ...prev,
-            email: contactForm.email,
+            email: normalizedEmail || null,
             phone: contactForm.phone,
           } as any)
         : prev
@@ -342,6 +410,8 @@ export default function CustomerDashboard() {
 
                     if (kind === 'invoice') {
                       const invoiceNumber = payload.invoice_number || '';
+                      const totalAmount = Number(payload.total_amount ?? 0);
+                      const amountPaid = Number(payload.amount_paid ?? 0);
                       const amountDue = Number(payload.amount_due ?? 0);
                       const status = (payload.status || 'open').toString();
                       const approved = payload.approved as boolean | null | undefined;
@@ -352,9 +422,11 @@ export default function CustomerDashboard() {
                             <div>
                               <h3 className={styles.serviceType}>Invoice {invoiceNumber || ''}</h3>
                               <p className={styles.serviceDate}>{dateStr}</p>
-                              <p className={styles.serviceTech}>
-                                Status: {status} • Amount Due: ${amountDue.toFixed(2)}
-                              </p>
+                              <p className={styles.serviceTech}>Status: {status}</p>
+                              <p className={styles.serviceTech}>Total: ${totalAmount.toFixed(2)}</p>
+                              <p className={styles.serviceTech}>Paid: ${amountPaid.toFixed(2)}</p>
+                              <p className={styles.serviceTech}>Balance Due: ${amountDue.toFixed(2)}</p>
+                              {s.summary && <p className={styles.serviceTech}>{s.summary}</p>}
                             </div>
 
                             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -444,9 +516,9 @@ export default function CustomerDashboard() {
                             <div>
                               <h3 className={styles.serviceType}>Estimate {estimateNumber || ''}</h3>
                               <p className={styles.serviceDate}>{dateStr}</p>
-                              <p className={styles.serviceTech}>
-                                Status: {status} • Total: ${totalAmount.toFixed(2)}
-                              </p>
+                              <p className={styles.serviceTech}>Status: {status}</p>
+                              <p className={styles.serviceTech}>Total: ${totalAmount.toFixed(2)}</p>
+                              {s.summary && <p className={styles.serviceTech}>{s.summary}</p>}
                             </div>
 
                             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
