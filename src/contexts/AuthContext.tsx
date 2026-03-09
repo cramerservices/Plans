@@ -21,9 +21,7 @@ function normalizeEmail(email: string) {
 async function ensureProfile(user: User) {
   const email = normalizeEmail(user.email || '');
 
-  if (!email) {
-    throw new Error('User email is missing.');
-  }
+  if (!email) return;
 
   const { error } = await supabase
     .from('profiles')
@@ -37,7 +35,7 @@ async function ensureProfile(user: User) {
     );
 
   if (error) {
-    throw error;
+    console.error('ensureProfile upsert failed:', error);
   }
 }
 
@@ -48,29 +46,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
+    let mounted = true;
+
     const loadSession = async () => {
-      const { data, error } = await supabase.auth.getSession();
+      try {
+        const { data, error } = await supabase.auth.getSession();
 
-      if (error) {
-        console.error('getSession error:', error);
-      }
-
-      const currentSession = data.session ?? null;
-      const currentUser = currentSession?.user ?? null;
-
-      setSession(currentSession);
-      setUser(currentUser);
-      setIsAdmin(currentUser?.app_metadata?.role === 'admin');
-
-      if (currentUser) {
-        try {
-          await ensureProfile(currentUser);
-        } catch (err) {
-          console.error('ensureProfile on initial load failed:', err);
+        if (error) {
+          console.error('getSession error:', error);
         }
-      }
 
-      setLoading(false);
+        if (!mounted) return;
+
+        const currentSession = data.session ?? null;
+        const currentUser = currentSession?.user ?? null;
+
+        setSession(currentSession);
+        setUser(currentUser);
+        setIsAdmin(currentUser?.app_metadata?.role === 'admin');
+
+        if (currentUser) {
+          await ensureProfile(currentUser);
+        }
+      } catch (err) {
+        console.error('loadSession failed:', err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
     };
 
     loadSession();
@@ -78,25 +80,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      const currentSession = session ?? null;
-      const currentUser = currentSession?.user ?? null;
+      try {
+        const currentSession = session ?? null;
+        const currentUser = currentSession?.user ?? null;
 
-      setSession(currentSession);
-      setUser(currentUser);
-      setIsAdmin(currentUser?.app_metadata?.role === 'admin');
+        setSession(currentSession);
+        setUser(currentUser);
+        setIsAdmin(currentUser?.app_metadata?.role === 'admin');
 
-      if (currentUser) {
-        try {
+        if (currentUser) {
           await ensureProfile(currentUser);
-        } catch (err) {
-          console.error('ensureProfile on auth change failed:', err);
         }
+      } catch (err) {
+        console.error('onAuthStateChange failed:', err);
+      } finally {
+        setLoading(false);
       }
-
-      setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
@@ -129,11 +134,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (error) throw error;
 
-    if (!data.user) {
-      throw new Error('User created but no user was returned.');
+    if (data.user) {
+      await ensureProfile(data.user);
     }
-
-    await ensureProfile(data.user);
   };
 
   const signOut = async () => {
