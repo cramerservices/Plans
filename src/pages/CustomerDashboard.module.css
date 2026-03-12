@@ -379,6 +379,124 @@
   border-bottom: 1px solid #e2e8f0;
 }
 
+
+
+.cardHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.cardHeaderRow .cardTitle {
+  margin-bottom: 0;
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.secondaryButton {
+  appearance: none;
+  border: 1px solid #cbd5e0;
+  background: #fff;
+  color: #2d3748;
+  padding: 0.55rem 0.9rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.secondaryButton:hover {
+  border-color: #a0aec0;
+  transform: translateY(-1px);
+}
+
+.secondaryButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.error,
+.success {
+  padding: 0.75rem 0.875rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  margin-bottom: 0.875rem;
+}
+
+.error {
+  color: #9b2c2c;
+  background: #fff5f5;
+  border: 1px solid #fed7d7;
+}
+
+.success {
+  color: #276749;
+  background: #f0fff4;
+  border: 1px solid #c6f6d5;
+}
+
+.contactLabel {
+  color: #718096;
+  font-weight: 600;
+}
+
+.contactValue {
+  color: #1a202c;
+  font-weight: 600;
+  text-align: right;
+}
+
+.contactInput {
+  width: 320px;
+  max-width: 100%;
+  border: 1px solid #cbd5e0;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  font-size: 0.95rem;
+}
+
+.contactInput:focus {
+  outline: none;
+  border-color: #4299e1;
+  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.2);
+}
+
+.contactActions {
+  display: flex;
+  gap: 0.625rem;
+}
+
+.badge {
+  display: inline-block;
+  background: #edf2f7;
+  color: #2d3748;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.serviceTech {
+  color: #4a5568;
+  font-size: 0.875rem;
+  margin-top: 0.3rem;
+}
+
+.techBadge {
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  color: #4a5568;
+  white-space: nowrap;
+}
+
 @media (max-width: 768px) {
   .grid {
     grid-template-columns: 1fr;
@@ -396,6 +514,15 @@
   .contactItem {
     flex-direction: column;
     gap: 0.25rem;
+  }
+
+  .contactValue {
+    text-align: left;
+  }
+
+  .contactActions {
+    width: 100%;
+    justify-content: flex-start;
   }
 }
 
