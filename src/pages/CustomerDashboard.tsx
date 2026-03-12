@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { CustomerMembership, ServiceCompleted, Customer } from '../types';
+import { CustomerMembership, ServiceCompleted, Customer, Profile } from '../types';
 import styles from './CustomerDashboard.module.css';
 
 type ServiceDoc = {
@@ -18,23 +18,6 @@ type ServiceDoc = {
   service_date?: string | null;
   service_type?: string | null;
   storage_path?: string | null;
-};
-
-type CrmCustomer = {
-  id: string;
-  portal_customer_id?: string | null;
-  email?: string | null;
-  name?: string | null;
-  phone?: string | null;
-  address?: string | null;
-};
-
-type ProfileRow = {
-  id: string;
-  email?: string | null;
-  role?: string | null;
-  created_at?: string | null;
-  updated_at?: string | null;
 };
 
 function titleCaseServiceType(raw: string | null | undefined) {
@@ -53,7 +36,8 @@ export default function CustomerDashboard() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
-  const [customer, setCustomer] = useState<(Customer & ProfileRow) | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [customer, setCustomer] = useState<Customer | null>(null);
   const [memberships, setMemberships] = useState<CustomerMembership[]>([]);
   const [services, setServices] = useState<ServiceCompleted[]>([]);
   const [serviceDocs, setServiceDocs] = useState<ServiceDoc[]>([]);
@@ -76,6 +60,7 @@ export default function CustomerDashboard() {
         if (authLoading) return;
 
         if (!user?.id) {
+          setProfile(null);
           setCustomer(null);
           setMemberships([]);
           setServices([]);
@@ -83,68 +68,63 @@ export default function CustomerDashboard() {
           return;
         }
 
-        // 1) Portal profile
+        // 1) Load central profile by auth user id
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
-          .select('*')
+          .select('id, email, role, customer_id, customer_membership_id, created_at, updated_at')
           .eq('id', user.id)
           .maybeSingle();
 
         if (profileError) throw profileError;
 
-        const profile = (profileData as ProfileRow | null) ?? null;
+        const profileRow = (profileData as Profile | null) ?? null;
+        console.log('[Plans linkage] loaded profile:', profileRow);
 
-        setCustomer((profile as any) ?? null);
-        setContactForm({
-          email: profile?.email || '',
-          phone: '',
-        });
+        setProfile(profileRow);
 
-        // 2) Memberships
-        // Correct table relationship is user_id for portal user.
-        // Keep legacy fallback customer_id = user.id just in case old rows exist.
-        const { data: membershipsData, error: membershipsError } = await supabase
-          .from('customer_memberships')
-          .select('*, plan:maintenance_plans(*)')
-          .or(`user_id.eq.${user.id},customer_id.eq.${user.id}`)
-          .order('created_at', { ascending: false });
-
-        if (membershipsError) throw membershipsError;
-
-        setMemberships((membershipsData as any) || []);
-
-        // 3) Find linked CRM customers
-        const portalEmail = normalizeEmail(profile?.email);
-        const crmCustomerIds = new Set<string>();
-
-        const { data: linkedCrmCustomers, error: linkedCrmError } = await supabase
-          .from('customers')
-          .select('id, portal_customer_id, email, name, phone, address')
-          .eq('portal_customer_id', user.id);
-
-        if (linkedCrmError) throw linkedCrmError;
-
-        ((linkedCrmCustomers as CrmCustomer[]) || []).forEach((c) => {
-          if (c?.id) crmCustomerIds.add(c.id);
-        });
-
-        if (portalEmail) {
-          const { data: emailMatchedCrmCustomers, error: emailCrmError } = await supabase
+        // 2) Load linked customer via profiles.customer_id -> customers.id
+        let loadedCustomer: Customer | null = null;
+        if (profileRow?.customer_id) {
+          const { data: customerData, error: customerError } = await supabase
             .from('customers')
-            .select('id, portal_customer_id, email, name, phone, address')
-            .eq('email', portalEmail);
+            .select('*')
+            .eq('id', profileRow.customer_id)
+            .maybeSingle();
 
-          if (emailCrmError) throw emailCrmError;
+          if (customerError) throw customerError;
 
-          ((emailMatchedCrmCustomers as CrmCustomer[]) || []).forEach((c) => {
-            if (c?.id) crmCustomerIds.add(c.id);
-          });
+          loadedCustomer = (customerData as Customer | null) ?? null;
+          console.log('[Plans linkage] loaded customer:', loadedCustomer);
+        } else {
+          console.log('[Plans linkage] missing linkage values: profiles.customer_id is null for profile', profileRow?.id);
         }
 
-        // Legacy fallback
-        crmCustomerIds.add(user.id);
+        setCustomer(loadedCustomer);
+        setContactForm({
+          email: normalizeEmail(profileRow?.email) || loadedCustomer?.email || '',
+          phone: loadedCustomer?.phone || '',
+        });
 
-        const customerIdList = Array.from(crmCustomerIds);
+        // 3) Load linked membership via profiles.customer_membership_id -> customer_memberships.id
+        let loadedMemberships: CustomerMembership[] = [];
+        if (profileRow?.customer_membership_id) {
+          const { data: membershipData, error: membershipError } = await supabase
+            .from('customer_memberships')
+            .select('*, plan:maintenance_plans(*)')
+            .eq('id', profileRow.customer_membership_id)
+            .limit(1);
+
+          if (membershipError) throw membershipError;
+
+          loadedMemberships = (membershipData as CustomerMembership[]) || [];
+          console.log('[Plans linkage] loaded membership:', loadedMemberships[0] ?? null);
+        } else {
+          console.log('[Plans linkage] missing linkage values: profiles.customer_membership_id is null for profile', profileRow?.id);
+        }
+
+        setMemberships(loadedMemberships);
+
+        const customerIdList = loadedCustomer?.id ? [loadedCustomer.id] : [];
 
         // 4) Service history
         let servicesData: any[] = [];
@@ -157,6 +137,8 @@ export default function CustomerDashboard() {
 
           if (error) throw error;
           servicesData = data || [];
+        } else {
+          console.log('[Plans linkage] missing linkage values: cannot load services without profiles.customer_id');
         }
 
         setServices(servicesData as any);
@@ -209,12 +191,12 @@ export default function CustomerDashboard() {
 
       if (error) throw error;
 
-      setCustomer((prev) =>
+      setProfile((prev) =>
         prev
           ? ({
               ...prev,
               email: normalizedEmail || null,
-            } as any)
+            } as Profile)
           : prev
       );
 
@@ -658,7 +640,7 @@ export default function CustomerDashboard() {
                         setIsEditingContact(false);
                         setContactError(null);
                         setContactSuccess(null);
-                        setContactForm({ email: customer?.email || '', phone: customer?.phone || '' });
+                        setContactForm({ email: profile?.email || customer?.email || '', phone: customer?.phone || '' });
                       }}
                       disabled={contactSaving}
                     >
@@ -678,7 +660,7 @@ export default function CustomerDashboard() {
                 <div className={styles.contactItem}>
                   <span className={styles.contactLabel}>Email:</span>
                   {!isEditingContact ? (
-                    <strong className={styles.contactValue}>{customer?.email || 'Not provided'}</strong>
+                    <strong className={styles.contactValue}>{profile?.email || customer?.email || 'Not provided'}</strong>
                   ) : (
                     <input
                       value={contactForm.email}
@@ -707,7 +689,7 @@ export default function CustomerDashboard() {
                 <div className={styles.contactItem}>
                   <span className={styles.contactLabel}>Service Address:</span>
                   <strong className={styles.contactValue}>
-                    {'Not provided'}
+                    {customer?.service_address ? `${customer.service_address}, ${customer.city}, ${customer.state} ${customer.zip_code}` : 'Not provided'}
                   </strong>
                 </div>
               </div>
