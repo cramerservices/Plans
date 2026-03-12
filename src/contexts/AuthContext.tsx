@@ -39,6 +39,10 @@ async function ensureProfile(user: User) {
   }
 }
 
+function isAdminUser(user: User | null) {
+  return user?.app_metadata?.role === 'admin';
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -47,6 +51,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
+
+    const syncAuthState = (currentSession: Session | null) => {
+      const currentUser = currentSession?.user ?? null;
+
+      setSession(currentSession);
+      setUser(currentUser);
+      setIsAdmin(isAdminUser(currentUser));
+      setLoading(false);
+
+      if (currentUser) {
+        // Avoid awaiting additional Supabase calls while processing auth events.
+        void ensureProfile(currentUser).catch((error) => {
+          console.error('ensureProfile failed:', error);
+        });
+      }
+    };
 
     const loadSession = async () => {
       try {
@@ -58,20 +78,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (!mounted) return;
 
-        const currentSession = data.session ?? null;
-        const currentUser = currentSession?.user ?? null;
-
-        setSession(currentSession);
-        setUser(currentUser);
-        setIsAdmin(currentUser?.app_metadata?.role === 'admin');
-
-        if (currentUser) {
-          await ensureProfile(currentUser);
-        }
+        syncAuthState(data.session ?? null);
       } catch (err) {
         console.error('loadSession failed:', err);
-      } finally {
-        if (mounted) setLoading(false);
+        if (mounted) {
+          setLoading(false);
+        }
       }
     };
 
@@ -79,23 +91,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      try {
-        const currentSession = session ?? null;
-        const currentUser = currentSession?.user ?? null;
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (!mounted) return;
 
-        setSession(currentSession);
-        setUser(currentUser);
-        setIsAdmin(currentUser?.app_metadata?.role === 'admin');
-
-        if (currentUser) {
-          await ensureProfile(currentUser);
-        }
-      } catch (err) {
-        console.error('onAuthStateChange failed:', err);
-      } finally {
-        setLoading(false);
-      }
+      syncAuthState(nextSession ?? null);
     });
 
     return () => {
@@ -115,7 +114,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error;
 
     if (data.user) {
-      await ensureProfile(data.user);
+      void ensureProfile(data.user).catch((err) => {
+        console.error('ensureProfile after signIn failed:', err);
+      });
     }
   };
 
@@ -135,7 +136,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error;
 
     if (data.user) {
-      await ensureProfile(data.user);
+      void ensureProfile(data.user).catch((err) => {
+        console.error('ensureProfile after signUp failed:', err);
+      });
     }
   };
 
