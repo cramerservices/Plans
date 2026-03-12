@@ -650,7 +650,7 @@ export default function CustomerDashboard() {
                     Edit
                   </button>
                 ) : (
-                  <div style={{ display: 'flex', gap: 10 }}>
+                  <div className={styles.contactActions}>
                     <button
                       type="button"
                       className={styles.secondaryButton}
@@ -676,37 +676,37 @@ export default function CustomerDashboard() {
 
               <div className={styles.contactInfo}>
                 <div className={styles.contactItem}>
-                  <span>Email:</span>
+                  <span className={styles.contactLabel}>Email:</span>
                   {!isEditingContact ? (
-                    <strong>{customer?.email || 'Not provided'}</strong>
+                    <strong className={styles.contactValue}>{customer?.email || 'Not provided'}</strong>
                   ) : (
                     <input
                       value={contactForm.email}
                       onChange={(e) => setContactForm((p) => ({ ...p, email: e.target.value }))}
                       type="email"
-                      style={{ width: 320, maxWidth: '100%' }}
+                      className={styles.contactInput}
                     />
                   )}
                 </div>
 
                 <div className={styles.contactItem}>
-                  <span>Phone:</span>
+                  <span className={styles.contactLabel}>Phone:</span>
                   {!isEditingContact ? (
-                    <strong>{customer?.phone || 'Not provided'}</strong>
+                    <strong className={styles.contactValue}>{customer?.phone || 'Not provided'}</strong>
                   ) : (
                     <input
                       value={contactForm.phone}
                       onChange={(e) => setContactForm((p) => ({ ...p, phone: e.target.value }))}
                       type="tel"
                       placeholder="(555) 123-4567"
-                      style={{ width: 220, maxWidth: '100%' }}
+                      className={styles.contactInput}
                     />
                   )}
                 </div>
 
                 <div className={styles.contactItem}>
-                  <span>Service Address:</span>
-                  <strong>
+                  <span className={styles.contactLabel}>Service Address:</span>
+                  <strong className={styles.contactValue}>
                     {'Not provided'}
                   </strong>
                 </div>
