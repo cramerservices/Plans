@@ -29,6 +29,14 @@ type CrmCustomer = {
   address?: string | null;
 };
 
+type ProfileRow = {
+  id: string;
+  email?: string | null;
+  role?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
 function titleCaseServiceType(raw: string | null | undefined) {
   if (!raw) return 'Service';
   return raw
@@ -42,53 +50,63 @@ function normalizeEmail(email?: string | null) {
 }
 
 export default function CustomerDashboard() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
-  const [customer, setCustomer] = useState<Customer | null>(null);
+  const [customer, setCustomer] = useState<(Customer & ProfileRow) | null>(null);
   const [memberships, setMemberships] = useState<CustomerMembership[]>([]);
   const [services, setServices] = useState<ServiceCompleted[]>([]);
   const [serviceDocs, setServiceDocs] = useState<ServiceDoc[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // ---- Contact edit state ----
   const [isEditingContact, setIsEditingContact] = useState(false);
   const [contactForm, setContactForm] = useState({ email: '', phone: '' });
   const [contactSaving, setContactSaving] = useState(false);
   const [contactError, setContactError] = useState<string | null>(null);
   const [contactSuccess, setContactSuccess] = useState<string | null>(null);
 
-  // ---- CRM action state ----
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user?.id) return;
-
     const load = async () => {
       try {
         setLoading(true);
 
-        // 1) Portal customer profile
-        const { data: customerData, error: customerError } = await supabase
-          .from('portal_customers')
+        if (authLoading) return;
+
+        if (!user?.id) {
+          setCustomer(null);
+          setMemberships([]);
+          setServices([]);
+          setServiceDocs([]);
+          return;
+        }
+
+        // 1) Portal profile
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
           .select('*')
           .eq('id', user.id)
           .maybeSingle();
 
-        if (customerError) throw customerError;
+        if (profileError) throw profileError;
 
-        setCustomer((customerData as any) ?? null);
+        const profile = (profileData as ProfileRow | null) ?? null;
+
+        setCustomer((profile as any) ?? null);
         setContactForm({
-          email: (customerData as any)?.email || '',
-          phone: (customerData as any)?.phone || '',
+          email: profile?.email || '',
+          phone: '',
         });
 
         // 2) Memberships
+        // Correct table relationship is user_id for portal user.
+        // Keep legacy fallback customer_id = user.id just in case old rows exist.
         const { data: membershipsData, error: membershipsError } = await supabase
           .from('customer_memberships')
           .select('*, plan:maintenance_plans(*)')
-          .eq('customer_id', user.id)
+          .or(`user_id.eq.${user.id},customer_id.eq.${user.id}`)
           .order('created_at', { ascending: false });
 
         if (membershipsError) throw membershipsError;
@@ -96,10 +114,9 @@ export default function CustomerDashboard() {
         setMemberships((membershipsData as any) || []);
 
         // 3) Find linked CRM customers
-        const portalEmail = normalizeEmail((customerData as any)?.email);
+        const portalEmail = normalizeEmail(profile?.email);
         const crmCustomerIds = new Set<string>();
 
-        // First: linked by portal_customer_id
         const { data: linkedCrmCustomers, error: linkedCrmError } = await supabase
           .from('customers')
           .select('id, portal_customer_id, email, name, phone, address')
@@ -111,7 +128,6 @@ export default function CustomerDashboard() {
           if (c?.id) crmCustomerIds.add(c.id);
         });
 
-        // Second: fallback match by email if needed
         if (portalEmail) {
           const { data: emailMatchedCrmCustomers, error: emailCrmError } = await supabase
             .from('customers')
@@ -125,12 +141,12 @@ export default function CustomerDashboard() {
           });
         }
 
-        // Include portal id too as fallback for any legacy rows
+        // Legacy fallback
         crmCustomerIds.add(user.id);
 
         const customerIdList = Array.from(crmCustomerIds);
 
-        // 4) Service history (services_completed)
+        // 4) Service history
         let servicesData: any[] = [];
         if (customerIdList.length > 0) {
           const { data, error } = await supabase
@@ -145,7 +161,7 @@ export default function CustomerDashboard() {
 
         setServices(servicesData as any);
 
-        // 5) Tune-up reports (service_docs)
+        // 5) Service docs
         let docsData: any[] = [];
         if (customerIdList.length > 0) {
           const { data, error } = await supabase
@@ -167,7 +183,7 @@ export default function CustomerDashboard() {
     };
 
     load();
-  }, [user?.id]);
+  }, [user?.id, authLoading]);
 
   const activeMembership = useMemo(() => {
     return memberships.find((m: any) => m.status === 'active') || null;
@@ -175,39 +191,40 @@ export default function CustomerDashboard() {
 
   const saveContact = async () => {
     if (!user?.id) return;
+
     setContactSaving(true);
     setContactError(null);
     setContactSuccess(null);
 
-    const normalizedEmail = normalizeEmail(contactForm.email);
+    try {
+      const normalizedEmail = normalizeEmail(contactForm.email);
 
-    const { error } = await supabase
-      .from('portal_customers')
-      .update({
-        email: normalizedEmail || null,
-        phone: contactForm.phone,
-      })
-      .eq('id', user.id);
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          email: normalizedEmail || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', user.id);
 
-    setContactSaving(false);
+      if (error) throw error;
 
-    if (error) {
-      setContactError(error.message);
-      return;
+      setCustomer((prev) =>
+        prev
+          ? ({
+              ...prev,
+              email: normalizedEmail || null,
+            } as any)
+          : prev
+      );
+
+      setContactSuccess('Saved.');
+      setIsEditingContact(false);
+    } catch (error: any) {
+      setContactError(error?.message || 'Failed to save.');
+    } finally {
+      setContactSaving(false);
     }
-
-    setContactSuccess('Saved.');
-    setIsEditingContact(false);
-
-    setCustomer((prev) =>
-      prev
-        ? ({
-            ...prev,
-            email: normalizedEmail || null,
-            phone: contactForm.phone,
-          } as any)
-        : prev
-    );
   };
 
   const updateServiceApproval = async (serviceId: string, approved: boolean) => {
@@ -250,7 +267,7 @@ export default function CustomerDashboard() {
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <div className={styles.container}>
         <Header />
@@ -266,7 +283,7 @@ export default function CustomerDashboard() {
       <div className={styles.content}>
         <div className={styles.header}>
           <div>
-            <h1 className={styles.title}>Welcome back, {customer?.full_name || 'Customer'}!</h1>
+            <h1 className={styles.title}>Welcome back, {'Customer'}!</h1>
             <p className={styles.subtitle}>Manage your HVAC maintenance membership</p>
           </div>
         </div>
@@ -327,7 +344,9 @@ export default function CustomerDashboard() {
                     </div>
                   )}
 
-                  <div className={styles.benefitNote}>Ready to schedule your next tune-up? Call us at (555) 123-4567</div>
+                  <div className={styles.benefitNote}>
+                    Ready to schedule your next tune-up? Call us at (555) 123-4567
+                  </div>
                 </div>
               </div>
             </div>
@@ -349,7 +368,9 @@ export default function CustomerDashboard() {
               {serviceDocs.length === 0 ? (
                 <div className={styles.emptyState}>
                   <p>No tune-up reports yet.</p>
-                  <p className={styles.emptyStateNote}>Your tune-up reports will appear here after your first tune-up.</p>
+                  <p className={styles.emptyStateNote}>
+                    Your tune-up reports will appear here after your first tune-up.
+                  </p>
                 </div>
               ) : (
                 <div className={styles.servicesList}>
@@ -374,8 +395,14 @@ export default function CustomerDashboard() {
                         </div>
 
                         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                          {doc.technician_name && <span className={styles.techBadge}>Technician: {doc.technician_name}</span>}
-                          <button type="button" className={styles.pdfButton} onClick={() => handleOpenServiceDocPdf(doc)}>
+                          {doc.technician_name && (
+                            <span className={styles.techBadge}>Technician: {doc.technician_name}</span>
+                          )}
+                          <button
+                            type="button"
+                            className={styles.pdfButton}
+                            onClick={() => handleOpenServiceDocPdf(doc)}
+                          >
                             View Report PDF
                           </button>
                         </div>
@@ -393,7 +420,9 @@ export default function CustomerDashboard() {
               {services.length === 0 ? (
                 <div className={styles.emptyState}>
                   <p>No service history yet.</p>
-                  <p className={styles.emptyStateNote}>Invoices, estimates, and other services will appear here.</p>
+                  <p className={styles.emptyStateNote}>
+                    Invoices, estimates, and other services will appear here.
+                  </p>
                 </div>
               ) : (
                 <div className={styles.servicesList}>
@@ -678,9 +707,7 @@ export default function CustomerDashboard() {
                 <div className={styles.contactItem}>
                   <span>Service Address:</span>
                   <strong>
-                    {customer?.service_address
-                      ? `${customer.service_address}, ${customer.city}, ${customer.state} ${customer.zip_code}`
-                      : 'Not provided'}
+                    {'Not provided'}
                   </strong>
                 </div>
               </div>
