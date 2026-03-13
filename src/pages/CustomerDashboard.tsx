@@ -32,6 +32,22 @@ function normalizeEmail(email?: string | null) {
   return (email || '').trim().toLowerCase();
 }
 
+async function findCustomerByEmail(email?: string | null) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return null;
+
+  const { data, error } = await supabase
+    .from('customers')
+    .select('*')
+    .ilike('email', normalizedEmail)
+    .limit(10);
+
+  if (error) throw error;
+
+  const rows = (data as Customer[] | null) ?? [];
+  return rows.find((row) => normalizeEmail(row.email) === normalizedEmail) ?? null;
+}
+
 export default function CustomerDashboard() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -75,9 +91,11 @@ export default function CustomerDashboard() {
           .eq('auth_user_id', user.id)
           .maybeSingle();
 
-        if (profileError) throw profileError;
+        if (profileError) {
+          console.warn('[Plans linkage] profiles lookup blocked, using email fallback:', profileError.message);
+        }
 
-        const profileRow = (profileData as Profile | null) ?? null;
+        const profileRow = profileError ? null : (profileData as Profile | null) ?? null;
         console.log('[Plans linkage] loaded profile:', profileRow);
 
         setProfile(profileRow);
@@ -96,7 +114,8 @@ export default function CustomerDashboard() {
           loadedCustomer = (customerData as Customer | null) ?? null;
           console.log('[Plans linkage] loaded customer:', loadedCustomer);
         } else {
-          console.log('[Plans linkage] missing linkage values: profiles.customer_id is null for profile', profileRow?.id);
+          loadedCustomer = await findCustomerByEmail(profileRow?.email || user.email);
+          console.log('[Plans linkage] loaded customer from email fallback:', loadedCustomer);
         }
 
         setCustomer(loadedCustomer);
@@ -119,7 +138,20 @@ export default function CustomerDashboard() {
           loadedMemberships = (membershipData as CustomerMembership[]) || [];
           console.log('[Plans linkage] loaded membership:', loadedMemberships[0] ?? null);
         } else {
-          console.log('[Plans linkage] missing linkage values: profiles.customer_membership_id is null for profile', profileRow?.id);
+          if (loadedCustomer?.id) {
+            const { data: membershipData, error: membershipError } = await supabase
+              .from('customer_memberships')
+              .select('*, plan:maintenance_plans(*)')
+              .eq('customer_id', loadedCustomer.id)
+              .order('created_at', { ascending: false });
+
+            if (membershipError) throw membershipError;
+
+            loadedMemberships = (membershipData as CustomerMembership[]) || [];
+            console.log('[Plans linkage] loaded memberships from customer fallback:', loadedMemberships);
+          } else {
+            console.log('[Plans linkage] missing linkage values: no customer found for user');
+          }
         }
 
         setMemberships(loadedMemberships);
@@ -181,15 +213,30 @@ export default function CustomerDashboard() {
     try {
       const normalizedEmail = normalizeEmail(contactForm.email);
 
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          email: normalizedEmail || null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('auth_user_id', user.id);
+      if (profile?.auth_user_id) {
+        const { error } = await supabase
+          .from('profiles')
+          .update({
+            email: normalizedEmail || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('auth_user_id', user.id);
 
-      if (error) throw error;
+        if (error) throw error;
+      }
+
+      if (customer?.id) {
+        const { error } = await supabase
+          .from('customers')
+          .update({
+            email: normalizedEmail || null,
+            phone: contactForm.phone || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', customer.id);
+
+        if (error) throw error;
+      }
 
       setProfile((prev) =>
         prev
@@ -197,6 +244,16 @@ export default function CustomerDashboard() {
               ...prev,
               email: normalizedEmail || null,
             } as Profile)
+          : prev
+      );
+
+      setCustomer((prev) =>
+        prev
+          ? ({
+              ...prev,
+              email: normalizedEmail || prev.email,
+              phone: contactForm.phone || prev.phone,
+            } as Customer)
           : prev
       );
 
