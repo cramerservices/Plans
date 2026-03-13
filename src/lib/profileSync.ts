@@ -38,6 +38,76 @@ interface SyncProfileParams {
   portalCustomerId?: string | null;
 }
 
+async function fallbackSyncProfileClientSide({
+  email,
+  authUserId,
+  customerId,
+  portalCustomerId,
+}: {
+  email: string;
+  authUserId: string;
+  customerId?: string | null;
+  portalCustomerId?: string | null;
+}) {
+  const normalizedEmail = normalizeEmail(email);
+
+  const { data: authData } = await supabase.auth.getUser();
+  if (!authData.user || authData.user.id !== authUserId) {
+    return null;
+  }
+
+  const { data: existingProfile, error: existingProfileError } = await supabase
+    .from('profiles')
+    .select('id, auth_user_id, email, role, customer_id, portal_customer_id')
+    .eq('auth_user_id', authUserId)
+    .maybeSingle();
+
+  if (existingProfileError) {
+    console.error('[profile sync] fallback profile lookup error:', existingProfileError);
+    return null;
+  }
+
+  if (existingProfile) {
+    const { data: updated, error: updateError } = await supabase
+      .from('profiles')
+      .update({
+        email: normalizedEmail || null,
+        customer_id: customerId ?? existingProfile.customer_id ?? null,
+        portal_customer_id: portalCustomerId ?? existingProfile.portal_customer_id ?? null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('auth_user_id', authUserId)
+      .select('*')
+      .maybeSingle();
+
+    if (updateError) {
+      console.error('[profile sync] fallback profile update error:', updateError);
+      return null;
+    }
+
+    return updated;
+  }
+
+  const { data: inserted, error: insertError } = await supabase
+    .from('profiles')
+    .insert({
+      auth_user_id: authUserId,
+      email: normalizedEmail || null,
+      role: 'customer',
+      customer_id: customerId ?? null,
+      portal_customer_id: portalCustomerId ?? null,
+    })
+    .select('*')
+    .maybeSingle();
+
+  if (insertError) {
+    console.error('[profile sync] fallback profile insert error:', insertError);
+    return null;
+  }
+
+  return inserted;
+}
+
 export async function syncProfileByEmail({
   email,
   authUserId,
@@ -67,7 +137,28 @@ export async function syncProfileByEmail({
 
   if (error) {
     console.error('[profile sync] sync_profile_by_email error:', error);
-    return null;
+
+    const canFallbackToClientSync =
+      error.code === '42501' ||
+      error.code === 'PGRST301' ||
+      /permission|policy|row-level security/i.test(error.message || '');
+
+    if (!canFallbackToClientSync) {
+      return null;
+    }
+
+    const fallbackData = await fallbackSyncProfileClientSide({
+      email: normalizedEmail,
+      authUserId,
+      customerId: matchedCustomer?.id ?? null,
+      portalCustomerId: matchedPortalCustomer?.id ?? null,
+    });
+
+    if (fallbackData) {
+      console.log('[profile sync] fallback client-side sync success:', fallbackData);
+    }
+
+    return fallbackData;
   }
 
   console.log('[profile sync] sync_profile_by_email success result:', data);

@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import { normalizeEmail, syncProfileByEmail } from '../lib/profileSync';
+import { normalizeEmail } from '../lib/profileSync';
 
 interface AuthContextType {
   user: User | null;
@@ -76,32 +76,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = async (email: string, password: string) => {
     const cleanEmail = normalizeEmail(email);
 
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { error } = await supabase.auth.signInWithPassword({
       email: cleanEmail,
       password,
     });
 
     if (error) throw error;
-
-    if (data.user?.email) {
-      console.log('[auth] login success:', {
-        auth_user_id: data.user.id,
-        email: data.user.email,
-      });
-
-      void syncProfileByEmail({
-        email: data.user.email,
-        authUserId: data.user.id,
-      }).catch((err) => {
-        console.error('syncProfileByEmail after signIn failed:', err);
-      });
-    }
   };
 
   const signUp = async (email: string, password: string, fullName: string) => {
     const cleanEmail = normalizeEmail(email);
 
-    const { data, error } = await supabase.auth.signUp({
+    const { error } = await supabase.auth.signUp({
       email: cleanEmail,
       password,
       options: {
@@ -111,20 +97,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
     });
 
-    if (error) throw error;
+    if (error) {
+      const canRecoverFromDbTriggerError = /database error saving new user/i.test(error.message || '');
+      if (!canRecoverFromDbTriggerError) {
+        throw error;
+      }
 
-    if (data.user?.email) {
-      console.log('[auth] signup success:', {
-        auth_user_id: data.user.id,
-        email: data.user.email,
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password,
       });
 
-      void syncProfileByEmail({
-        email: data.user.email,
-        authUserId: data.user.id,
-      }).catch((err) => {
-        console.error('syncProfileByEmail after signUp failed:', err);
-      });
+      if (signInError) {
+        throw error;
+      }
     }
   };
 
