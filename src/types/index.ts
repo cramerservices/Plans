@@ -14,9 +14,11 @@ export interface Customer {
 
 export interface Profile {
   id: string;
+  auth_user_id?: string | null;
   email?: string | null;
   role?: string | null;
   customer_id?: string | null;
+  portal_customer_id?: string | null;
   customer_membership_id?: string | null;
   created_at?: string;
   updated_at?: string;

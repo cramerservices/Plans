@@ -71,8 +71,8 @@ export default function CustomerDashboard() {
         // 1) Load central profile by auth user id
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
-          .select('id, email, role, customer_id, customer_membership_id, created_at, updated_at')
-          .eq('id', user.id)
+          .select('id, auth_user_id, email, role, customer_id, portal_customer_id, customer_membership_id, created_at, updated_at')
+          .eq('auth_user_id', user.id)
           .maybeSingle();
 
         if (profileError) throw profileError;
@@ -187,7 +187,7 @@ export default function CustomerDashboard() {
           email: normalizedEmail || null,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', user.id);
+        .eq('auth_user_id', user.id);
 
       if (error) throw error;
 

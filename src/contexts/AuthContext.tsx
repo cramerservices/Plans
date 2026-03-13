@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { normalizeEmail, syncProfileByEmail } from '../lib/profileSync';
 
 interface AuthContextType {
   user: User | null;
@@ -13,31 +14,6 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-function normalizeEmail(email: string) {
-  return email.trim().toLowerCase();
-}
-
-async function ensureProfile(user: User) {
-  const email = normalizeEmail(user.email || '');
-
-  if (!email) return;
-
-  const { error } = await supabase
-    .from('profiles')
-    .upsert(
-      {
-        id: user.id,
-        email,
-        role: user.app_metadata?.role === 'admin' ? 'admin' : 'customer',
-      },
-      { onConflict: 'id' }
-    );
-
-  if (error) {
-    console.error('ensureProfile upsert failed:', error);
-  }
-}
 
 function isAdminUser(user: User | null) {
   return user?.app_metadata?.role === 'admin';
@@ -60,12 +36,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsAdmin(isAdminUser(currentUser));
       setLoading(false);
 
-      if (currentUser) {
-        // Avoid awaiting additional Supabase calls while processing auth events.
-        void ensureProfile(currentUser).catch((error) => {
-          console.error('ensureProfile failed:', error);
-        });
-      }
     };
 
     const loadSession = async () => {
@@ -113,9 +83,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (error) throw error;
 
-    if (data.user) {
-      void ensureProfile(data.user).catch((err) => {
-        console.error('ensureProfile after signIn failed:', err);
+    if (data.user?.email) {
+      console.log('[auth] login success:', {
+        auth_user_id: data.user.id,
+        email: data.user.email,
+      });
+
+      void syncProfileByEmail({
+        email: data.user.email,
+        authUserId: data.user.id,
+      }).catch((err) => {
+        console.error('syncProfileByEmail after signIn failed:', err);
       });
     }
   };
@@ -135,9 +113,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (error) throw error;
 
-    if (data.user) {
-      void ensureProfile(data.user).catch((err) => {
-        console.error('ensureProfile after signUp failed:', err);
+    if (data.user?.email) {
+      console.log('[auth] signup success:', {
+        auth_user_id: data.user.id,
+        email: data.user.email,
+      });
+
+      void syncProfileByEmail({
+        email: data.user.email,
+        authUserId: data.user.id,
+      }).catch((err) => {
+        console.error('syncProfileByEmail after signUp failed:', err);
       });
     }
   };
