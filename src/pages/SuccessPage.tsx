@@ -33,10 +33,30 @@ export default function SuccessPage() {
           body: { session_id: sessionId },
         });
 
-        console.log("finalize-checkout response data:", data);
-        console.log("finalize-checkout response error:", error);
+        if (error) {
+          let errorBody: any = null;
 
-        if (error) throw error;
+          try {
+            errorBody = await error.context?.json();
+          } catch {
+            try {
+              errorBody = await error.context?.text();
+            } catch {
+              errorBody = null;
+            }
+          }
+
+          console.error("finalize-checkout response error object:", error);
+          console.error("finalize-checkout response error body:", errorBody);
+
+          throw new Error(
+            typeof errorBody === "string"
+              ? errorBody
+              : errorBody?.details || errorBody?.error || error.message || "Finalize checkout failed"
+          );
+        }
+
+        console.log("finalize-checkout response data:", data);
 
         if (!cancelled) {
           setMsg("All set! Redirecting to your dashboard...");
@@ -46,7 +66,11 @@ export default function SuccessPage() {
         console.error("SuccessPage finalize-checkout failed:", e);
 
         if (!cancelled) {
-          setMsg("Payment succeeded, but we couldn't attach the plan to your account yet. Contact support.");
+          setMsg(
+            `Payment succeeded, but we couldn't attach the plan to your account yet. ${
+              e?.message ? `Error: ${e.message}` : "Contact support."
+            }`
+          );
         }
       }
     })();
