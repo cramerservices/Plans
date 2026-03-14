@@ -20,6 +20,19 @@ type ServiceDoc = {
   storage_path?: string | null;
 };
 
+type PortalCustomer = {
+  id: string;
+  full_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  service_address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip_code?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
 function titleCaseServiceType(raw: string | null | undefined) {
   if (!raw) return 'Service';
   return raw
@@ -48,12 +61,29 @@ async function findCustomerByEmail(email?: string | null) {
   return rows.find((row) => normalizeEmail(row.email) === normalizedEmail) ?? null;
 }
 
+async function findPortalCustomerByEmail(email?: string | null) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return null;
+
+  const { data, error } = await supabase
+    .from('portal_customers')
+    .select('*')
+    .ilike('email', normalizedEmail)
+    .limit(10);
+
+  if (error) throw error;
+
+  const rows = (data as PortalCustomer[] | null) ?? [];
+  return rows.find((row) => normalizeEmail(row.email) === normalizedEmail) ?? null;
+}
+
 export default function CustomerDashboard() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [customer, setCustomer] = useState<Customer | null>(null);
+  const [portalCustomer, setPortalCustomer] = useState<PortalCustomer | null>(null);
   const [memberships, setMemberships] = useState<CustomerMembership[]>([]);
   const [services, setServices] = useState<ServiceCompleted[]>([]);
   const [serviceDocs, setServiceDocs] = useState<ServiceDoc[]>([]);
@@ -78,30 +108,53 @@ export default function CustomerDashboard() {
         if (!user?.id) {
           setProfile(null);
           setCustomer(null);
+          setPortalCustomer(null);
           setMemberships([]);
           setServices([]);
           setServiceDocs([]);
           return;
         }
 
-        // 1) Load central profile by auth user id
-        const { data: profileData, error: profileError } = await supabase
+        // 1) PROFILE
+        let profileRow: Profile | null = null;
+
+        const { data: profileByAuth, error: profileByAuthError } = await supabase
           .from('profiles')
-          .select('id, auth_user_id, email, role, customer_id, portal_customer_id, customer_membership_id, created_at, updated_at')
+          .select(
+            'id, auth_user_id, email, role, customer_id, portal_customer_id, customer_membership_id, created_at, updated_at'
+          )
           .eq('auth_user_id', user.id)
           .maybeSingle();
 
-        if (profileError) {
-          console.warn('[Plans linkage] profiles lookup blocked, using email fallback:', profileError.message);
+        if (profileByAuthError) {
+          console.warn('[Plans linkage] profiles lookup by auth_user_id blocked:', profileByAuthError.message);
+        } else {
+          profileRow = (profileByAuth as Profile | null) ?? null;
         }
 
-        const profileRow = profileError ? null : (profileData as Profile | null) ?? null;
-        console.log('[Plans linkage] loaded profile:', profileRow);
+        if (!profileRow && user.email) {
+          const { data: profileByEmail, error: profileByEmailError } = await supabase
+            .from('profiles')
+            .select(
+              'id, auth_user_id, email, role, customer_id, portal_customer_id, customer_membership_id, created_at, updated_at'
+            )
+            .ilike('email', normalizeEmail(user.email))
+            .limit(10);
 
+          if (profileByEmailError) {
+            console.warn('[Plans linkage] profiles lookup by email blocked:', profileByEmailError.message);
+          } else {
+            const rows = (profileByEmail as Profile[] | null) ?? [];
+            profileRow = rows.find((row) => normalizeEmail((row as any).email) === normalizeEmail(user.email)) ?? null;
+          }
+        }
+
+        console.log('[Plans linkage] loaded profile:', profileRow);
         setProfile(profileRow);
 
-        // 2) Load linked customer via profiles.customer_id -> customers.id
+        // 2) CRM CUSTOMER (customers table)
         let loadedCustomer: Customer | null = null;
+
         if (profileRow?.customer_id) {
           const { data: customerData, error: customerError } = await supabase
             .from('customers')
@@ -112,20 +165,51 @@ export default function CustomerDashboard() {
           if (customerError) throw customerError;
 
           loadedCustomer = (customerData as Customer | null) ?? null;
-          console.log('[Plans linkage] loaded customer:', loadedCustomer);
-        } else {
+          console.log('[Plans linkage] loaded customer from profile.customer_id:', loadedCustomer);
+        }
+
+        if (!loadedCustomer) {
           loadedCustomer = await findCustomerByEmail(profileRow?.email || user.email);
           console.log('[Plans linkage] loaded customer from email fallback:', loadedCustomer);
         }
 
         setCustomer(loadedCustomer);
+
+        // 3) PORTAL CUSTOMER (portal_customers table) - memberships use this id
+        let loadedPortalCustomer: PortalCustomer | null = null;
+
+        if (profileRow?.portal_customer_id) {
+          const { data: portalData, error: portalError } = await supabase
+            .from('portal_customers')
+            .select('*')
+            .eq('id', profileRow.portal_customer_id)
+            .maybeSingle();
+
+          if (portalError) throw portalError;
+
+          loadedPortalCustomer = (portalData as PortalCustomer | null) ?? null;
+          console.log('[Plans linkage] loaded portal customer from profile.portal_customer_id:', loadedPortalCustomer);
+        }
+
+        if (!loadedPortalCustomer) {
+          loadedPortalCustomer = await findPortalCustomerByEmail(profileRow?.email || user.email);
+          console.log('[Plans linkage] loaded portal customer from email fallback:', loadedPortalCustomer);
+        }
+
+        setPortalCustomer(loadedPortalCustomer);
+
         setContactForm({
-          email: normalizeEmail(profileRow?.email) || loadedCustomer?.email || '',
-          phone: loadedCustomer?.phone || '',
+          email:
+            normalizeEmail(profileRow?.email) ||
+            normalizeEmail(loadedPortalCustomer?.email) ||
+            normalizeEmail(loadedCustomer?.email) ||
+            '',
+          phone: loadedPortalCustomer?.phone || loadedCustomer?.phone || '',
         });
 
-        // 3) Load linked membership via profiles.customer_membership_id -> customer_memberships.id
+        // 4) MEMBERSHIPS
         let loadedMemberships: CustomerMembership[] = [];
+
         if (profileRow?.customer_membership_id) {
           const { data: membershipData, error: membershipError } = await supabase
             .from('customer_memberships')
@@ -136,29 +220,53 @@ export default function CustomerDashboard() {
           if (membershipError) throw membershipError;
 
           loadedMemberships = (membershipData as CustomerMembership[]) || [];
-          console.log('[Plans linkage] loaded membership:', loadedMemberships[0] ?? null);
-        } else {
-          if (loadedCustomer?.id) {
-            const { data: membershipData, error: membershipError } = await supabase
-              .from('customer_memberships')
-              .select('*, plan:maintenance_plans(*)')
-              .eq('customer_id', loadedCustomer.id)
-              .order('created_at', { ascending: false });
+          console.log('[Plans linkage] loaded membership from profile.customer_membership_id:', loadedMemberships[0] ?? null);
+        }
 
-            if (membershipError) throw membershipError;
+        if (loadedMemberships.length === 0 && profileRow?.portal_customer_id) {
+          const { data: membershipData, error: membershipError } = await supabase
+            .from('customer_memberships')
+            .select('*, plan:maintenance_plans(*)')
+            .eq('customer_id', profileRow.portal_customer_id)
+            .order('created_at', { ascending: false });
 
-            loadedMemberships = (membershipData as CustomerMembership[]) || [];
-            console.log('[Plans linkage] loaded memberships from customer fallback:', loadedMemberships);
-          } else {
-            console.log('[Plans linkage] missing linkage values: no customer found for user');
-          }
+          if (membershipError) throw membershipError;
+
+          loadedMemberships = (membershipData as CustomerMembership[]) || [];
+          console.log('[Plans linkage] loaded memberships from profile.portal_customer_id:', loadedMemberships);
+        }
+
+        if (loadedMemberships.length === 0 && loadedPortalCustomer?.id) {
+          const { data: membershipData, error: membershipError } = await supabase
+            .from('customer_memberships')
+            .select('*, plan:maintenance_plans(*)')
+            .eq('customer_id', loadedPortalCustomer.id)
+            .order('created_at', { ascending: false });
+
+          if (membershipError) throw membershipError;
+
+          loadedMemberships = (membershipData as CustomerMembership[]) || [];
+          console.log('[Plans linkage] loaded memberships from portal customer fallback:', loadedMemberships);
+        }
+
+        if (loadedMemberships.length === 0 && user.id) {
+          const { data: membershipData, error: membershipError } = await supabase
+            .from('customer_memberships')
+            .select('*, plan:maintenance_plans(*)')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false });
+
+          if (membershipError) throw membershipError;
+
+          loadedMemberships = (membershipData as CustomerMembership[]) || [];
+          console.log('[Plans linkage] loaded memberships from user_id fallback:', loadedMemberships);
         }
 
         setMemberships(loadedMemberships);
 
+        // 5) SERVICES + DOCS still use CRM customer id
         const customerIdList = loadedCustomer?.id ? [loadedCustomer.id] : [];
 
-        // 4) Service history
         let servicesData: any[] = [];
         if (customerIdList.length > 0) {
           const { data, error } = await supabase
@@ -170,12 +278,11 @@ export default function CustomerDashboard() {
           if (error) throw error;
           servicesData = data || [];
         } else {
-          console.log('[Plans linkage] missing linkage values: cannot load services without profiles.customer_id');
+          console.log('[Plans linkage] missing CRM customer id: cannot load services');
         }
 
         setServices(servicesData as any);
 
-        // 5) Service docs
         let docsData: any[] = [];
         if (customerIdList.length > 0) {
           const { data, error } = await supabase
@@ -186,6 +293,8 @@ export default function CustomerDashboard() {
 
           if (error) throw error;
           docsData = data || [];
+        } else {
+          console.log('[Plans linkage] missing CRM customer id: cannot load service docs');
         }
 
         setServiceDocs(docsData as any);
@@ -197,7 +306,7 @@ export default function CustomerDashboard() {
     };
 
     load();
-  }, [user?.id, authLoading]);
+  }, [user?.id, user?.email, authLoading]);
 
   const activeMembership = useMemo(() => {
     return memberships.find((m: any) => m.status === 'active') || null;
@@ -225,6 +334,19 @@ export default function CustomerDashboard() {
         if (error) throw error;
       }
 
+      if (portalCustomer?.id) {
+        const { error } = await supabase
+          .from('portal_customers')
+          .update({
+            email: normalizedEmail || null,
+            phone: contactForm.phone || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', portalCustomer.id);
+
+        if (error) throw error;
+      }
+
       if (customer?.id) {
         const { error } = await supabase
           .from('customers')
@@ -244,6 +366,16 @@ export default function CustomerDashboard() {
               ...prev,
               email: normalizedEmail || null,
             } as Profile)
+          : prev
+      );
+
+      setPortalCustomer((prev) =>
+        prev
+          ? ({
+              ...prev,
+              email: normalizedEmail || prev.email,
+              phone: contactForm.phone || prev.phone,
+            } as PortalCustomer)
           : prev
       );
 
@@ -697,7 +829,10 @@ export default function CustomerDashboard() {
                         setIsEditingContact(false);
                         setContactError(null);
                         setContactSuccess(null);
-                        setContactForm({ email: profile?.email || customer?.email || '', phone: customer?.phone || '' });
+                        setContactForm({
+                          email: profile?.email || portalCustomer?.email || customer?.email || '',
+                          phone: portalCustomer?.phone || customer?.phone || '',
+                        });
                       }}
                       disabled={contactSaving}
                     >
@@ -717,7 +852,9 @@ export default function CustomerDashboard() {
                 <div className={styles.contactItem}>
                   <span className={styles.contactLabel}>Email:</span>
                   {!isEditingContact ? (
-                    <strong className={styles.contactValue}>{profile?.email || customer?.email || 'Not provided'}</strong>
+                    <strong className={styles.contactValue}>
+                      {profile?.email || portalCustomer?.email || customer?.email || 'Not provided'}
+                    </strong>
                   ) : (
                     <input
                       value={contactForm.email}
@@ -731,7 +868,9 @@ export default function CustomerDashboard() {
                 <div className={styles.contactItem}>
                   <span className={styles.contactLabel}>Phone:</span>
                   {!isEditingContact ? (
-                    <strong className={styles.contactValue}>{customer?.phone || 'Not provided'}</strong>
+                    <strong className={styles.contactValue}>
+                      {portalCustomer?.phone || customer?.phone || 'Not provided'}
+                    </strong>
                   ) : (
                     <input
                       value={contactForm.phone}
@@ -746,7 +885,11 @@ export default function CustomerDashboard() {
                 <div className={styles.contactItem}>
                   <span className={styles.contactLabel}>Service Address:</span>
                   <strong className={styles.contactValue}>
-                    {customer?.service_address ? `${customer.service_address}, ${customer.city}, ${customer.state} ${customer.zip_code}` : 'Not provided'}
+                    {customer?.service_address
+                      ? `${customer.service_address}${customer.city ? `, ${customer.city}` : ''}${customer.state ? `, ${customer.state}` : ''}${customer.zip_code ? ` ${customer.zip_code}` : ''}`
+                      : portalCustomer?.service_address
+                      ? `${portalCustomer.service_address}${portalCustomer.city ? `, ${portalCustomer.city}` : ''}${portalCustomer.state ? `, ${portalCustomer.state}` : ''}${portalCustomer.zip_code ? ` ${portalCustomer.zip_code}` : ''}`
+                      : 'Not provided'}
                   </strong>
                 </div>
               </div>
