@@ -270,10 +270,11 @@ export default function CustomerDashboard() {
         let servicesData: any[] = [];
         if (customerIdList.length > 0) {
           const { data, error } = await supabase
-            .from('services_completed')
-            .select('*')
-            .in('customer_id', customerIdList)
-            .order('service_date', { ascending: false });
+          .from('services_completed')
+.select('*')
+.in('customer_id', customerIdList)
+.order('completed_at', { ascending: false, nullsFirst: false })
+.order('service_date', { ascending: false, nullsFirst: false });
 
           if (error) throw error;
           servicesData = data || [];
