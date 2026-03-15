@@ -149,10 +149,13 @@ export default function CustomerDashboard() {
           }
         }
 
+        console.log('[Plans linkage] user.id:', user.id);
+        console.log('[Plans linkage] user.email:', user.email);
         console.log('[Plans linkage] loaded profile:', profileRow);
+
         setProfile(profileRow);
 
-        // 2) CRM CUSTOMER (customers table)
+        // 2) CRM CUSTOMER
         let loadedCustomer: Customer | null = null;
 
         if (profileRow?.customer_id) {
@@ -175,7 +178,7 @@ export default function CustomerDashboard() {
 
         setCustomer(loadedCustomer);
 
-        // 3) PORTAL CUSTOMER (portal_customers table) - memberships use this id
+        // 3) PORTAL CUSTOMER
         let loadedPortalCustomer: PortalCustomer | null = null;
 
         if (profileRow?.portal_customer_id) {
@@ -264,17 +267,23 @@ export default function CustomerDashboard() {
 
         setMemberships(loadedMemberships);
 
-        // 5) SERVICES + DOCS still use CRM customer id
+        // 5) SERVICES + DOCS use CRM customer id
         const customerIdList = loadedCustomer?.id ? [loadedCustomer.id] : [];
 
+        console.log('[Plans linkage] customerIdList:', customerIdList);
+
         let servicesData: any[] = [];
+
         if (customerIdList.length > 0) {
           const { data, error } = await supabase
-          .from('services_completed')
-.select('*')
-.in('customer_id', customerIdList)
-.order('completed_at', { ascending: false, nullsFirst: false })
-.order('service_date', { ascending: false, nullsFirst: false });
+            .from('services_completed')
+            .select('*')
+            .in('customer_id', customerIdList)
+            .order('completed_at', { ascending: false, nullsFirst: false })
+            .order('service_date', { ascending: false, nullsFirst: false });
+
+          console.log('[Plans linkage] services query error:', error);
+          console.log('[Plans linkage] services query data:', data);
 
           if (error) throw error;
           servicesData = data || [];
@@ -282,15 +291,47 @@ export default function CustomerDashboard() {
           console.log('[Plans linkage] missing CRM customer id: cannot load services');
         }
 
+        // email fallback for service history if customer-id path returns nothing
+        if (servicesData.length === 0 && (loadedCustomer?.email || profileRow?.email || user.email)) {
+          const fallbackEmail = normalizeEmail(loadedCustomer?.email || profileRow?.email || user.email);
+          console.log('[Plans linkage] trying service history email fallback:', fallbackEmail);
+
+          const matchedCustomer = await findCustomerByEmail(fallbackEmail);
+
+          if (matchedCustomer?.id && (!loadedCustomer || matchedCustomer.id !== loadedCustomer.id)) {
+            console.log('[Plans linkage] email fallback matched CRM customer:', matchedCustomer);
+            setCustomer(matchedCustomer);
+
+            const { data, error } = await supabase
+              .from('services_completed')
+              .select('*')
+              .eq('customer_id', matchedCustomer.id)
+              .order('completed_at', { ascending: false, nullsFirst: false })
+              .order('service_date', { ascending: false, nullsFirst: false });
+
+            console.log('[Plans linkage] services fallback query error:', error);
+            console.log('[Plans linkage] services fallback query data:', data);
+
+            if (error) throw error;
+            servicesData = data || [];
+          }
+        }
+
+        console.log('[Plans linkage] final servicesData:', servicesData);
         setServices(servicesData as any);
 
         let docsData: any[] = [];
-        if (customerIdList.length > 0) {
+        const finalCustomerId = loadedCustomer?.id;
+
+        if (finalCustomerId) {
           const { data, error } = await supabase
             .from('service_docs')
             .select('*')
-            .in('customer_id', customerIdList)
+            .eq('customer_id', finalCustomerId)
             .order('created_at', { ascending: false });
+
+          console.log('[Plans linkage] service_docs query error:', error);
+          console.log('[Plans linkage] service_docs query data:', data);
 
           if (error) throw error;
           docsData = data || [];
