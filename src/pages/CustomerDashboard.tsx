@@ -3,7 +3,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { CustomerMembership, ServiceCompleted, Customer, Profile } from '../types';
+import {
+  CustomerMembership,
+  ServiceCompleted,
+  Customer,
+  Profile,
+} from '../types';
 import styles from './CustomerDashboard.module.css';
 
 type ServiceDoc = {
@@ -43,6 +48,21 @@ function titleCaseServiceType(raw: string | null | undefined) {
 
 function normalizeEmail(email?: string | null) {
   return (email || '').trim().toLowerCase();
+}
+
+function formatAddress(addressObj: {
+  service_address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip_code?: string | null;
+}) {
+  const parts = [
+    addressObj.service_address,
+    addressObj.city,
+    addressObj.state,
+    addressObj.zip_code,
+  ].filter(Boolean);
+  return parts.length ? parts.join(', ') : 'Not provided';
 }
 
 async function findCustomerByEmail(email?: string | null) {
@@ -115,7 +135,6 @@ export default function CustomerDashboard() {
           return;
         }
 
-        // 1) PROFILE
         let profileRow: Profile | null = null;
 
         const { data: profileByAuth, error: profileByAuthError } = await supabase
@@ -127,7 +146,10 @@ export default function CustomerDashboard() {
           .maybeSingle();
 
         if (profileByAuthError) {
-          console.warn('[Plans linkage] profiles lookup by auth_user_id blocked:', profileByAuthError.message);
+          console.warn(
+            '[Plans linkage] profiles lookup by auth_user_id blocked:',
+            profileByAuthError.message
+          );
         } else {
           profileRow = (profileByAuth as Profile | null) ?? null;
         }
@@ -142,10 +164,16 @@ export default function CustomerDashboard() {
             .limit(10);
 
           if (profileByEmailError) {
-            console.warn('[Plans linkage] profiles lookup by email blocked:', profileByEmailError.message);
+            console.warn(
+              '[Plans linkage] profiles lookup by email blocked:',
+              profileByEmailError.message
+            );
           } else {
             const rows = (profileByEmail as Profile[] | null) ?? [];
-            profileRow = rows.find((row) => normalizeEmail((row as any).email) === normalizeEmail(user.email)) ?? null;
+            profileRow =
+              rows.find(
+                (row) => normalizeEmail((row as any).email) === normalizeEmail(user.email)
+              ) ?? null;
           }
         }
 
@@ -155,7 +183,6 @@ export default function CustomerDashboard() {
 
         setProfile(profileRow);
 
-        // 2) CRM CUSTOMER
         let loadedCustomer: Customer | null = null;
 
         if (profileRow?.customer_id) {
@@ -166,19 +193,23 @@ export default function CustomerDashboard() {
             .maybeSingle();
 
           if (customerError) throw customerError;
-
           loadedCustomer = (customerData as Customer | null) ?? null;
-          console.log('[Plans linkage] loaded customer from profile.customer_id:', loadedCustomer);
+          console.log(
+            '[Plans linkage] loaded customer from profile.customer_id:',
+            loadedCustomer
+          );
         }
 
         if (!loadedCustomer) {
           loadedCustomer = await findCustomerByEmail(profileRow?.email || user.email);
-          console.log('[Plans linkage] loaded customer from email fallback:', loadedCustomer);
+          console.log(
+            '[Plans linkage] loaded customer from email fallback:',
+            loadedCustomer
+          );
         }
 
         setCustomer(loadedCustomer);
 
-        // 3) PORTAL CUSTOMER
         let loadedPortalCustomer: PortalCustomer | null = null;
 
         if (profileRow?.portal_customer_id) {
@@ -189,14 +220,21 @@ export default function CustomerDashboard() {
             .maybeSingle();
 
           if (portalError) throw portalError;
-
           loadedPortalCustomer = (portalData as PortalCustomer | null) ?? null;
-          console.log('[Plans linkage] loaded portal customer from profile.portal_customer_id:', loadedPortalCustomer);
+          console.log(
+            '[Plans linkage] loaded portal customer from profile.portal_customer_id:',
+            loadedPortalCustomer
+          );
         }
 
         if (!loadedPortalCustomer) {
-          loadedPortalCustomer = await findPortalCustomerByEmail(profileRow?.email || user.email);
-          console.log('[Plans linkage] loaded portal customer from email fallback:', loadedPortalCustomer);
+          loadedPortalCustomer = await findPortalCustomerByEmail(
+            profileRow?.email || user.email
+          );
+          console.log(
+            '[Plans linkage] loaded portal customer from email fallback:',
+            loadedPortalCustomer
+          );
         }
 
         setPortalCustomer(loadedPortalCustomer);
@@ -210,7 +248,6 @@ export default function CustomerDashboard() {
           phone: loadedPortalCustomer?.phone || loadedCustomer?.phone || '',
         });
 
-        // 4) MEMBERSHIPS
         let loadedMemberships: CustomerMembership[] = [];
 
         if (profileRow?.customer_membership_id) {
@@ -221,9 +258,11 @@ export default function CustomerDashboard() {
             .limit(1);
 
           if (membershipError) throw membershipError;
-
           loadedMemberships = (membershipData as CustomerMembership[]) || [];
-          console.log('[Plans linkage] loaded membership from profile.customer_membership_id:', loadedMemberships[0] ?? null);
+          console.log(
+            '[Plans linkage] loaded membership from profile.customer_membership_id:',
+            loadedMemberships[0] ?? null
+          );
         }
 
         if (loadedMemberships.length === 0 && profileRow?.portal_customer_id) {
@@ -234,9 +273,11 @@ export default function CustomerDashboard() {
             .order('created_at', { ascending: false });
 
           if (membershipError) throw membershipError;
-
           loadedMemberships = (membershipData as CustomerMembership[]) || [];
-          console.log('[Plans linkage] loaded memberships from profile.portal_customer_id:', loadedMemberships);
+          console.log(
+            '[Plans linkage] loaded memberships from profile.portal_customer_id:',
+            loadedMemberships
+          );
         }
 
         if (loadedMemberships.length === 0 && loadedPortalCustomer?.id) {
@@ -247,9 +288,11 @@ export default function CustomerDashboard() {
             .order('created_at', { ascending: false });
 
           if (membershipError) throw membershipError;
-
           loadedMemberships = (membershipData as CustomerMembership[]) || [];
-          console.log('[Plans linkage] loaded memberships from portal customer fallback:', loadedMemberships);
+          console.log(
+            '[Plans linkage] loaded memberships from portal customer fallback:',
+            loadedMemberships
+          );
         }
 
         if (loadedMemberships.length === 0 && user.id) {
@@ -260,16 +303,16 @@ export default function CustomerDashboard() {
             .order('created_at', { ascending: false });
 
           if (membershipError) throw membershipError;
-
           loadedMemberships = (membershipData as CustomerMembership[]) || [];
-          console.log('[Plans linkage] loaded memberships from user_id fallback:', loadedMemberships);
+          console.log(
+            '[Plans linkage] loaded memberships from user_id fallback:',
+            loadedMemberships
+          );
         }
 
         setMemberships(loadedMemberships);
 
-        // 5) SERVICES + DOCS use CRM customer id
         const customerIdList = loadedCustomer?.id ? [loadedCustomer.id] : [];
-
         console.log('[Plans linkage] customerIdList:', customerIdList);
 
         let servicesData: any[] = [];
@@ -291,15 +334,29 @@ export default function CustomerDashboard() {
           console.log('[Plans linkage] missing CRM customer id: cannot load services');
         }
 
-        // email fallback for service history if customer-id path returns nothing
-        if (servicesData.length === 0 && (loadedCustomer?.email || profileRow?.email || user.email)) {
-          const fallbackEmail = normalizeEmail(loadedCustomer?.email || profileRow?.email || user.email);
-          console.log('[Plans linkage] trying service history email fallback:', fallbackEmail);
+        if (
+          servicesData.length === 0 &&
+          (loadedCustomer?.email || profileRow?.email || user.email)
+        ) {
+          const fallbackEmail = normalizeEmail(
+            loadedCustomer?.email || profileRow?.email || user.email
+          );
+
+          console.log(
+            '[Plans linkage] trying service history email fallback:',
+            fallbackEmail
+          );
 
           const matchedCustomer = await findCustomerByEmail(fallbackEmail);
 
-          if (matchedCustomer?.id && (!loadedCustomer || matchedCustomer.id !== loadedCustomer.id)) {
-            console.log('[Plans linkage] email fallback matched CRM customer:', matchedCustomer);
+          if (
+            matchedCustomer?.id &&
+            (!loadedCustomer || matchedCustomer.id !== loadedCustomer.id)
+          ) {
+            console.log(
+              '[Plans linkage] email fallback matched CRM customer:',
+              matchedCustomer
+            );
             setCustomer(matchedCustomer);
 
             const { data, error } = await supabase
@@ -440,27 +497,157 @@ export default function CustomerDashboard() {
     }
   };
 
-  const updateServiceApproval = async (serviceId: string, approved: boolean) => {
+  const generateUniqueInvoiceNumber = async () => {
+    let isUnique = false;
+    let newNumber = '';
+
+    while (!isUnique) {
+      const stamp = Date.now().toString().slice(-6);
+      const random = Math.floor(Math.random() * 900) + 100;
+      newNumber = `INV-${stamp}${random}`;
+
+      const { data, error } = await supabase
+        .from('crm_invoices')
+        .select('id')
+        .eq('invoice_number', newNumber)
+        .limit(1);
+
+      if (error) throw error;
+
+      if (!data || data.length === 0) {
+        isUnique = true;
+      }
+    }
+
+    return newNumber;
+  };
+
+  const addDays = (dateString: string, days: number) => {
+    const date = new Date(dateString);
+    date.setDate(date.getDate() + days);
+    return date.toISOString().split('T')[0];
+  };
+
+  const createInvoiceFromEstimateOnDashboard = async (estimateId: string) => {
+    const { data: existingInvoice, error: existingInvoiceError } = await supabase
+      .from('crm_invoices')
+      .select('id, invoice_number')
+      .eq('estimate_id', estimateId)
+      .maybeSingle();
+
+    if (existingInvoiceError) throw existingInvoiceError;
+    if (existingInvoice) return existingInvoice;
+
+    const { data: estimate, error: estimateError } = await supabase
+      .from('estimates')
+      .select('*')
+      .eq('id', estimateId)
+      .single();
+
+    if (estimateError) throw estimateError;
+
+    const { data: estimateItems, error: estimateItemsError } = await supabase
+      .from('estimate_line_items')
+      .select('*')
+      .eq('estimate_id', estimateId)
+      .order('sort_order', { ascending: true });
+
+    if (estimateItemsError) throw estimateItemsError;
+
+    const invoiceNumber = await generateUniqueInvoiceNumber();
+    const today = new Date().toISOString().split('T')[0];
+    const dueDate = addDays(today, 7);
+    const totalAmount = Number((estimate as any).total_amount || 0);
+
+    const { data: invoice, error: invoiceError } = await supabase
+      .from('crm_invoices')
+      .insert({
+        invoice_number: invoiceNumber,
+        customer_id: (estimate as any).customer_id,
+        estimate_id: (estimate as any).id,
+        invoice_date: today,
+        due_date: dueDate,
+        work_completed_date: today,
+        tech_name: (estimate as any).tech_name || '',
+        notes: (estimate as any).notes || '',
+        status: 'sent',
+        total_amount: totalAmount,
+        amount_paid: 0,
+        amount_due: totalAmount,
+      })
+      .select()
+      .single();
+
+    if (invoiceError) throw invoiceError;
+
+    if (estimateItems && estimateItems.length > 0) {
+      const invoiceLineItems = estimateItems.map((item: any, index: number) => ({
+        invoice_id: (invoice as any).id,
+        description: item.description || '',
+        material_cost: Number(item.material_cost || 0),
+        labor_cost: Number(item.labor_cost || 0),
+        total_cost: Number(item.total_cost || 0),
+        sort_order: item.sort_order ?? index,
+      }));
+
+      const { error: lineError } = await supabase
+        .from('crm_invoice_line_items')
+        .insert(invoiceLineItems);
+
+      if (lineError) throw lineError;
+    }
+
+    return invoice;
+  };
+
+  const handleEstimateDecision = async (
+    serviceId: string,
+    estimateId: string | null | undefined,
+    newStatus: 'approved' | 'rejected'
+  ) => {
+    if (!estimateId) return;
+
     setActionError(null);
     setActionBusyId(serviceId);
 
     try {
-      const current = services.find((s) => (s as any).id === serviceId) as any;
-      const payload = (current?.payload ?? {}) as any;
-      const nextPayload = { ...payload, approved };
+      const { error: estimateUpdateError } = await supabase
+        .from('estimates')
+        .update({
+          status: newStatus,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', estimateId);
 
-      const { error } = await supabase
-        .from('services_completed')
-        .update({ payload: nextPayload })
-        .eq('id', serviceId);
+      if (estimateUpdateError) throw estimateUpdateError;
 
-      if (error) throw error;
+      if (newStatus === 'approved') {
+        await createInvoiceFromEstimateOnDashboard(estimateId);
+      }
 
-      setServices((prev) =>
-        prev.map((s: any) => (s.id === serviceId ? { ...s, payload: nextPayload } : s))
+      setServices((prev: any[]) =>
+        prev.map((s: any) => {
+          if (s.id !== serviceId) return s;
+
+          const nextPayload = {
+            ...(s.payload || {}),
+            status: newStatus,
+            approved: newStatus === 'approved',
+          };
+
+          return {
+            ...s,
+            summary: `Estimate ${nextPayload.estimate_number || ''} ${newStatus} for $${Number(
+              nextPayload.total_amount || 0
+            ).toFixed(2)}`,
+            payload: nextPayload,
+          };
+        })
       );
+
+      window.location.reload();
     } catch (e: any) {
-      setActionError(e?.message || 'Failed to update');
+      setActionError(e?.message || 'Failed to update estimate');
     } finally {
       setActionBusyId(null);
     }
@@ -472,13 +659,33 @@ export default function CustomerDashboard() {
   };
 
   const handleOpenServiceDocPdf = (doc: ServiceDoc) => {
-    if (doc.report_url) window.open(doc.report_url, '_blank', 'noopener,noreferrer');
+    if (doc.report_url) {
+      window.open(doc.report_url, '_blank', 'noopener,noreferrer');
+    }
   };
 
   const handleOpenHistoryPdf = (url?: string | null) => {
     if (!url) return;
     window.open(url, '_blank', 'noopener,noreferrer');
   };
+
+  const visibleServices = useMemo(() => {
+    return services.filter((s: any) => {
+      const payload = (s.payload ?? {}) as any;
+      const kind = (payload.kind || s.service_type || '').toString().toLowerCase();
+      const status = (payload.status || '').toString().toLowerCase();
+
+      if (kind === 'estimate') {
+        return status === 'sent' || status === 'approved';
+      }
+
+      if (kind === 'invoice') {
+        return ['sent', 'partial', 'overdue', 'paid', 'cancelled'].includes(status);
+      }
+
+      return true;
+    });
+  }, [services]);
 
   if (loading || authLoading) {
     return (
@@ -496,7 +703,7 @@ export default function CustomerDashboard() {
       <div className={styles.content}>
         <div className={styles.header}>
           <div>
-            <h1 className={styles.title}>Welcome back, {'Customer'}!</h1>
+            <h1 className={styles.title}>Welcome back, Customer!</h1>
             <p className={styles.subtitle}>Manage your HVAC maintenance membership</p>
           </div>
         </div>
@@ -527,11 +734,15 @@ export default function CustomerDashboard() {
                     </div>
                     <div className={styles.detailRow}>
                       <span>Start Date:</span>
-                      <strong>{new Date((activeMembership as any).start_date).toLocaleDateString()}</strong>
+                      <strong>
+                        {new Date((activeMembership as any).start_date).toLocaleDateString()}
+                      </strong>
                     </div>
                     <div className={styles.detailRow}>
                       <span>End Date:</span>
-                      <strong>{new Date((activeMembership as any).end_date).toLocaleDateString()}</strong>
+                      <strong>
+                        {new Date((activeMembership as any).end_date).toLocaleDateString()}
+                      </strong>
                     </div>
                     <div className={styles.detailRow}>
                       <span>Discount on Repairs:</span>
@@ -545,9 +756,12 @@ export default function CustomerDashboard() {
                 <h2 className={styles.cardTitle}>Benefits Remaining</h2>
                 <div className={styles.benefits}>
                   <div className={styles.benefitItem}>
-                    <div className={styles.benefitNumber}>{(activeMembership as any).tune_ups_remaining}</div>
+                    <div className={styles.benefitNumber}>
+                      {(activeMembership as any).tune_ups_remaining}
+                    </div>
                     <div className={styles.benefitLabel}>
-                      Tune-Up{(activeMembership as any).tune_ups_remaining !== 1 ? 's' : ''} Remaining
+                      Tune-Up{(activeMembership as any).tune_ups_remaining !== 1 ? 's' : ''}{' '}
+                      Remaining
                     </div>
                   </div>
 
@@ -567,12 +781,14 @@ export default function CustomerDashboard() {
             <div className={styles.card}>
               <h2 className={styles.cardTitle}>Plan Features</h2>
               <div className={styles.featuresList}>
-                {(activeMembership as any).plan?.features?.map((feature: string, index: number) => (
-                  <div key={index} className={styles.featureItem}>
-                    <span className={styles.checkIcon}>✓</span>
-                    {feature}
-                  </div>
-                ))}
+                {(activeMembership as any).plan?.features?.map(
+                  (feature: string, index: number) => (
+                    <div key={index} className={styles.featureItem}>
+                      <span className={styles.checkIcon}>✓</span>
+                      {feature}
+                    </div>
+                  )
+                )}
               </div>
             </div>
 
@@ -591,7 +807,9 @@ export default function CustomerDashboard() {
                     <div key={doc.id} className={styles.serviceCard}>
                       <div className={styles.serviceHeader}>
                         <div>
-                          <h3 className={styles.serviceType}>{titleCaseServiceType(doc.service_type)}</h3>
+                          <h3 className={styles.serviceType}>
+                            {titleCaseServiceType(doc.service_type)}
+                          </h3>
                           <p className={styles.serviceDate}>
                             {doc.service_date
                               ? new Date(doc.service_date).toLocaleDateString('en-US', {
@@ -609,7 +827,9 @@ export default function CustomerDashboard() {
 
                         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                           {doc.technician_name && (
-                            <span className={styles.techBadge}>Technician: {doc.technician_name}</span>
+                            <span className={styles.techBadge}>
+                              Technician: {doc.technician_name}
+                            </span>
                           )}
                           <button
                             type="button"
@@ -628,9 +848,10 @@ export default function CustomerDashboard() {
 
             <div className={styles.card}>
               <h2 className={styles.cardTitle}>Service History</h2>
+
               {actionError && <div className={styles.error}>{actionError}</div>}
 
-              {services.length === 0 ? (
+              {visibleServices.length === 0 ? (
                 <div className={styles.emptyState}>
                   <p>No service history yet.</p>
                   <p className={styles.emptyStateNote}>
@@ -639,12 +860,13 @@ export default function CustomerDashboard() {
                 </div>
               ) : (
                 <div className={styles.servicesList}>
-                  {services.map((s: any) => {
+                  {visibleServices.map((s: any) => {
                     const payload = (s.payload ?? {}) as any;
-                    const kind = (payload.kind || s.service_type || '').toString();
+                    const kind = (payload.kind || s.service_type || '').toString().toLowerCase();
                     const pdfUrl = s.pdf_path || payload.pdf_url || null;
-
-                    const dateStr = new Date(s.service_date).toLocaleDateString('en-US', {
+                    const dateStr = new Date(
+                      s.service_date || s.completed_at || s.created_at || Date.now()
+                    ).toLocaleDateString('en-US', {
                       year: 'numeric',
                       month: 'long',
                       day: 'numeric',
@@ -655,90 +877,60 @@ export default function CustomerDashboard() {
                       const totalAmount = Number(payload.total_amount ?? 0);
                       const amountPaid = Number(payload.amount_paid ?? 0);
                       const amountDue = Number(payload.amount_due ?? 0);
-                      const status = (payload.status || 'open').toString();
-                      const approved = payload.approved as boolean | null | undefined;
+                      const status = (payload.status || 'draft').toString().toLowerCase();
+                      const canPay =
+                        ['sent', 'partial', 'overdue'].includes(status) && amountDue > 0;
 
                       return (
                         <div key={s.id} className={styles.serviceCard}>
                           <div className={styles.serviceHeader}>
                             <div>
-                              <h3 className={styles.serviceType}>Invoice {invoiceNumber || ''}</h3>
+                              <h3 className={styles.serviceType}>
+                                Invoice {invoiceNumber || ''}
+                              </h3>
                               <p className={styles.serviceDate}>{dateStr}</p>
                               <p className={styles.serviceTech}>Status: {status}</p>
-                              <p className={styles.serviceTech}>Total: ${totalAmount.toFixed(2)}</p>
-                              <p className={styles.serviceTech}>Paid: ${amountPaid.toFixed(2)}</p>
-                              <p className={styles.serviceTech}>Balance Due: ${amountDue.toFixed(2)}</p>
+                              <p className={styles.serviceTech}>
+                                Total: ${totalAmount.toFixed(2)}
+                              </p>
+                              <p className={styles.serviceTech}>
+                                Paid: ${amountPaid.toFixed(2)}
+                              </p>
+                              <p className={styles.serviceTech}>
+                                Balance Due: ${amountDue.toFixed(2)}
+                              </p>
                               {s.summary && <p className={styles.serviceTech}>{s.summary}</p>}
                             </div>
 
-                            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                              {approved == null ? (
-                                <>
-                                  {pdfUrl && (
-                                    <button
-                                      type="button"
-                                      className={styles.secondaryButton}
-                                      onClick={() => handleOpenHistoryPdf(pdfUrl)}
-                                    >
-                                      View PDF
-                                    </button>
-                                  )}
+                            <div
+                              style={{
+                                display: 'flex',
+                                gap: 10,
+                                alignItems: 'center',
+                                flexWrap: 'wrap',
+                              }}
+                            >
+                              {pdfUrl && (
+                                <button
+                                  type="button"
+                                  className={styles.secondaryButton}
+                                  onClick={() => handleOpenHistoryPdf(pdfUrl)}
+                                >
+                                  View PDF
+                                </button>
+                              )}
 
-                                  <button
-                                    type="button"
-                                    className={styles.secondaryButton}
-                                    disabled={actionBusyId === s.id}
-                                    onClick={() => updateServiceApproval(s.id, false)}
-                                  >
-                                    Decline
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    className={styles.pdfButton}
-                                    disabled={actionBusyId === s.id}
-                                    onClick={() => updateServiceApproval(s.id, true)}
-                                  >
-                                    Approve
-                                  </button>
-                                </>
-                              ) : approved === false ? (
-                                <>
-                                  <span className={styles.badge}>Declined</span>
-                                  {pdfUrl && (
-                                    <button
-                                      type="button"
-                                      className={styles.secondaryButton}
-                                      onClick={() => handleOpenHistoryPdf(pdfUrl)}
-                                    >
-                                      View PDF
-                                    </button>
-                                  )}
-                                </>
-                              ) : (
-                                <>
-                                  <span className={styles.badge}>Approved</span>
-
-                                  {pdfUrl && (
-                                    <button
-                                      type="button"
-                                      className={styles.secondaryButton}
-                                      onClick={() => handleOpenHistoryPdf(pdfUrl)}
-                                    >
-                                      View PDF
-                                    </button>
-                                  )}
-
-                                  <button
-                                    type="button"
-                                    className={styles.pdfButton}
-                                    onClick={() => handlePayInvoice(payload.invoice_id)}
-                                    disabled={!payload.invoice_id || amountDue <= 0}
-                                    title={!payload.invoice_id ? 'Missing invoice id' : undefined}
-                                  >
-                                    {amountDue <= 0 ? 'Paid' : 'Pay Now'}
-                                  </button>
-                                </>
+                              {canPay && (
+                                <button
+                                  type="button"
+                                  className={styles.pdfButton}
+                                  onClick={() =>
+                                    handlePayInvoice(payload.invoice_id || s.invoice_id)
+                                  }
+                                  disabled={!(payload.invoice_id || s.invoice_id)}
+                                >
+                                  Pay
+                                </button>
                               )}
                             </div>
                           </div>
@@ -749,76 +941,65 @@ export default function CustomerDashboard() {
                     if (kind === 'estimate') {
                       const estimateNumber = payload.estimate_number || '';
                       const totalAmount = Number(payload.total_amount ?? 0);
-                      const status = (payload.status || 'draft').toString();
-                      const approved = payload.approved as boolean | null | undefined;
+                      const status = (payload.status || 'draft').toString().toLowerCase();
+                      const estimateId = payload.estimate_id || s.estimate_id || null;
 
                       return (
                         <div key={s.id} className={styles.serviceCard}>
                           <div className={styles.serviceHeader}>
                             <div>
-                              <h3 className={styles.serviceType}>Estimate {estimateNumber || ''}</h3>
+                              <h3 className={styles.serviceType}>
+                                Estimate {estimateNumber || ''}
+                              </h3>
                               <p className={styles.serviceDate}>{dateStr}</p>
                               <p className={styles.serviceTech}>Status: {status}</p>
-                              <p className={styles.serviceTech}>Total: ${totalAmount.toFixed(2)}</p>
+                              <p className={styles.serviceTech}>
+                                Total: ${totalAmount.toFixed(2)}
+                              </p>
                               {s.summary && <p className={styles.serviceTech}>{s.summary}</p>}
                             </div>
 
-                            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                              {approved == null ? (
-                                <>
-                                  {pdfUrl && (
-                                    <button
-                                      type="button"
-                                      className={styles.secondaryButton}
-                                      onClick={() => handleOpenHistoryPdf(pdfUrl)}
-                                    >
-                                      View PDF
-                                    </button>
-                                  )}
+                            <div
+                              style={{
+                                display: 'flex',
+                                gap: 10,
+                                alignItems: 'center',
+                                flexWrap: 'wrap',
+                              }}
+                            >
+                              {pdfUrl && (
+                                <button
+                                  type="button"
+                                  className={styles.secondaryButton}
+                                  onClick={() => handleOpenHistoryPdf(pdfUrl)}
+                                >
+                                  View PDF
+                                </button>
+                              )}
 
+                              {status === 'sent' && (
+                                <>
                                   <button
                                     type="button"
                                     className={styles.secondaryButton}
                                     disabled={actionBusyId === s.id}
-                                    onClick={() => updateServiceApproval(s.id, false)}
+                                    onClick={() =>
+                                      handleEstimateDecision(s.id, estimateId, 'rejected')
+                                    }
                                   >
-                                    Decline
+                                    Reject
                                   </button>
 
                                   <button
                                     type="button"
                                     className={styles.pdfButton}
                                     disabled={actionBusyId === s.id}
-                                    onClick={() => updateServiceApproval(s.id, true)}
+                                    onClick={() =>
+                                      handleEstimateDecision(s.id, estimateId, 'approved')
+                                    }
                                   >
                                     Approve
                                   </button>
-                                </>
-                              ) : approved === false ? (
-                                <>
-                                  <span className={styles.badge}>Declined</span>
-                                  {pdfUrl && (
-                                    <button
-                                      type="button"
-                                      className={styles.secondaryButton}
-                                      onClick={() => handleOpenHistoryPdf(pdfUrl)}
-                                    >
-                                      View PDF
-                                    </button>
-                                  )}
-                                </>
-                              ) : (
-                                <>
-                                  <span className={styles.badge}>Approved</span>
-                                  {pdfUrl && (
-                                    <button
-                                      type="button"
-                                      className={styles.secondaryButton}
-                                      onClick={() => handleOpenHistoryPdf(pdfUrl)}
-                                    >
-                                      View PDF
-                                    </button>
-                                  )}
                                 </>
                               )}
                             </div>
@@ -831,13 +1012,22 @@ export default function CustomerDashboard() {
                       <div key={s.id} className={styles.serviceCard}>
                         <div className={styles.serviceHeader}>
                           <div>
-                            <h3 className={styles.serviceType}>{titleCaseServiceType(s.service_type)}</h3>
+                            <h3 className={styles.serviceType}>
+                              {titleCaseServiceType(s.service_type)}
+                            </h3>
                             <p className={styles.serviceDate}>{dateStr}</p>
                             {s.summary && <p className={styles.serviceTech}>{s.summary}</p>}
                           </div>
 
                           {pdfUrl && (
-                            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                            <div
+                              style={{
+                                display: 'flex',
+                                gap: 10,
+                                alignItems: 'center',
+                                flexWrap: 'wrap',
+                              }}
+                            >
                               <button
                                 type="button"
                                 className={styles.secondaryButton}
@@ -858,8 +1048,13 @@ export default function CustomerDashboard() {
             <div className={styles.card}>
               <div className={styles.cardHeaderRow}>
                 <h2 className={styles.cardTitle}>Contact Information</h2>
+
                 {!isEditingContact ? (
-                  <button type="button" className={styles.secondaryButton} onClick={() => setIsEditingContact(true)}>
+                  <button
+                    type="button"
+                    className={styles.secondaryButton}
+                    onClick={() => setIsEditingContact(true)}
+                  >
                     Edit
                   </button>
                 ) : (
@@ -872,7 +1067,8 @@ export default function CustomerDashboard() {
                         setContactError(null);
                         setContactSuccess(null);
                         setContactForm({
-                          email: profile?.email || portalCustomer?.email || customer?.email || '',
+                          email:
+                            profile?.email || portalCustomer?.email || customer?.email || '',
                           phone: portalCustomer?.phone || customer?.phone || '',
                         });
                       }}
@@ -880,7 +1076,13 @@ export default function CustomerDashboard() {
                     >
                       Cancel
                     </button>
-                    <button type="button" className={styles.pdfButton} onClick={saveContact} disabled={contactSaving}>
+
+                    <button
+                      type="button"
+                      className={styles.pdfButton}
+                      onClick={saveContact}
+                      disabled={contactSaving}
+                    >
                       {contactSaving ? 'Saving...' : 'Save'}
                     </button>
                   </div>
@@ -895,12 +1097,17 @@ export default function CustomerDashboard() {
                   <span className={styles.contactLabel}>Email:</span>
                   {!isEditingContact ? (
                     <strong className={styles.contactValue}>
-                      {profile?.email || portalCustomer?.email || customer?.email || 'Not provided'}
+                      {profile?.email ||
+                        portalCustomer?.email ||
+                        customer?.email ||
+                        'Not provided'}
                     </strong>
                   ) : (
                     <input
                       value={contactForm.email}
-                      onChange={(e) => setContactForm((p) => ({ ...p, email: e.target.value }))}
+                      onChange={(e) =>
+                        setContactForm((p) => ({ ...p, email: e.target.value }))
+                      }
                       type="email"
                       className={styles.contactInput}
                     />
@@ -916,7 +1123,9 @@ export default function CustomerDashboard() {
                   ) : (
                     <input
                       value={contactForm.phone}
-                      onChange={(e) => setContactForm((p) => ({ ...p, phone: e.target.value }))}
+                      onChange={(e) =>
+                        setContactForm((p) => ({ ...p, phone: e.target.value }))
+                      }
                       type="tel"
                       placeholder="(555) 123-4567"
                       className={styles.contactInput}
@@ -928,9 +1137,9 @@ export default function CustomerDashboard() {
                   <span className={styles.contactLabel}>Service Address:</span>
                   <strong className={styles.contactValue}>
                     {customer?.service_address
-                      ? `${customer.service_address}${customer.city ? `, ${customer.city}` : ''}${customer.state ? `, ${customer.state}` : ''}${customer.zip_code ? ` ${customer.zip_code}` : ''}`
+                      ? formatAddress(customer)
                       : portalCustomer?.service_address
-                      ? `${portalCustomer.service_address}${portalCustomer.city ? `, ${portalCustomer.city}` : ''}${portalCustomer.state ? `, ${portalCustomer.state}` : ''}${portalCustomer.zip_code ? ` ${portalCustomer.zip_code}` : ''}`
+                      ? formatAddress(portalCustomer)
                       : 'Not provided'}
                   </strong>
                 </div>
