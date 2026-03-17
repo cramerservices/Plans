@@ -729,10 +729,10 @@ const handleEstimateDecision = async (
     setActionBusyId(null);
   }
 };
-  const handlePayInvoice = (invoiceId: string | undefined | null) => {
-    if (!invoiceId) return;
-    navigate(`/checkout?invoiceId=${encodeURIComponent(invoiceId)}`);
-  };
+const handlePayInvoice = (invoiceId: string | undefined | null) => {
+  if (!invoiceId) return;
+  navigate(`/invoice-checkout?invoiceId=${encodeURIComponent(invoiceId)}`);
+};
 
   const handleOpenServiceDocPdf = (doc: ServiceDoc) => {
     if (doc.report_url) {
