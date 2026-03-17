@@ -709,10 +709,6 @@ const handleEstimateDecision = async (
 
     await syncEstimateToServicesCompleted(estimateId, null);
 
-    if (newStatus === 'approved') {
-      await createInvoiceFromEstimateOnDashboard(estimateId);
-    }
-
     const { data: refreshedServices, error: refreshedServicesError } = await supabase
       .from('services_completed')
       .select('*')
@@ -728,8 +724,7 @@ const handleEstimateDecision = async (
   } finally {
     setActionBusyId(null);
   }
-};
-const handlePayInvoice = (invoiceId: string | undefined | null) => {
+};const handlePayInvoice = (invoiceId: string | undefined | null) => {
   if (!invoiceId) return;
   navigate(`/invoice-checkout?invoiceId=${encodeURIComponent(invoiceId)}`);
 };
