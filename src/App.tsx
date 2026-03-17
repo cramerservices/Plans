@@ -2,7 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 
 import HomePage from './pages/HomePage';
-import PlansPage from './pages/PlansPage';
+import PlansPage from './pages/PlansPage'; 
 import CheckoutPage from './pages/CheckoutPage';
 import InvoiceCheckoutPage from './pages/InvoiceCheckoutPage';
 import LoginPage from './pages/LoginPage';
