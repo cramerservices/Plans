@@ -9,7 +9,7 @@ import {
   Customer,
   Profile,
 } from '../types';
-import styles from './CustomerDashboard.module.css';
+import styles from './CustomerDashboard.module.css'; 
 
 type ServiceDoc = {
   id: string;
