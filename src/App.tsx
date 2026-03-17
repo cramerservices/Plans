@@ -4,6 +4,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import HomePage from './pages/HomePage';
 import PlansPage from './pages/PlansPage';
 import CheckoutPage from './pages/CheckoutPage';
+import InvoiceCheckoutPage from './pages/InvoiceCheckoutPage';
 import LoginPage from './pages/LoginPage';
 import CustomerDashboard from './pages/CustomerDashboard';
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -14,17 +15,23 @@ function App() {
   return (
     <AuthProvider>
       <Routes>
-        {/* Public */}
         <Route path="/" element={<HomePage />} />
         <Route path="/plans" element={<PlansPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/success" element={<SuccessPage />} />
 
-        {/* Checkout (support both patterns) */}
         <Route path="/checkout" element={<CheckoutPage />} />
         <Route path="/checkout/:planId" element={<CheckoutPage />} />
 
-        {/* Customer dashboard (must be logged in) */}
+        <Route
+          path="/invoice-checkout"
+          element={
+            <ProtectedRoute>
+              <InvoiceCheckoutPage />
+            </ProtectedRoute>
+          }
+        />
+
         <Route
           path="/dashboard"
           element={
@@ -34,7 +41,6 @@ function App() {
           }
         />
 
-        {/* Admin routes (must be logged in + admin) */}
         <Route
           path="/admin/*"
           element={
@@ -44,7 +50,6 @@ function App() {
           }
         />
 
-        {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AuthProvider>
@@ -52,4 +57,3 @@ function App() {
 }
 
 export default App;
-
