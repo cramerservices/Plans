@@ -600,59 +600,135 @@ export default function CustomerDashboard() {
     return invoice;
   };
 
-  const handleEstimateDecision = async (
-    serviceId: string,
-    estimateId: string | null | undefined,
-    newStatus: 'approved' | 'rejected'
-  ) => {
-    if (!estimateId) return;
+const syncEstimateToServicesCompleted = async (
+  estimateId: string,
+  pdfUrl: string | null = null
+) => {
+  const { data: estimateRow, error: estimateError } = await supabase
+    .from('estimates')
+    .select('*')
+    .eq('id', estimateId)
+    .single();
 
-    setActionError(null);
-    setActionBusyId(serviceId);
+  if (estimateError) throw estimateError;
 
-    try {
-      const { error: estimateUpdateError } = await supabase
-        .from('estimates')
-        .update({
-          status: newStatus,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', estimateId);
+  const estimate = estimateRow as any;
 
-      if (estimateUpdateError) throw estimateUpdateError;
+  const { data: existingRow, error: existingError } = await supabase
+    .from('services_completed')
+    .select('id, payload, pdf_path')
+    .eq('estimate_id', estimate.id)
+    .maybeSingle();
 
-      if (newStatus === 'approved') {
-        await createInvoiceFromEstimateOnDashboard(estimateId);
-      }
+  if (existingError) throw existingError;
 
-      setServices((prev: any[]) =>
-        prev.map((s: any) => {
-          if (s.id !== serviceId) return s;
+  const existingPayload = (existingRow?.payload ?? {}) as any;
 
-          const nextPayload = {
-            ...(s.payload || {}),
-            status: newStatus,
-            approved: newStatus === 'approved',
-          };
+  const finalPdfUrl =
+    pdfUrl ||
+    existingPayload?.pdf_url ||
+    existingRow?.pdf_path ||
+    null;
 
-          return {
-            ...s,
-            summary: `Estimate ${nextPayload.estimate_number || ''} ${newStatus} for $${Number(
-              nextPayload.total_amount || 0
-            ).toFixed(2)}`,
-            payload: nextPayload,
-          };
-        })
-      );
-
-      window.location.reload();
-    } catch (e: any) {
-      setActionError(e?.message || 'Failed to update estimate');
-    } finally {
-      setActionBusyId(null);
-    }
+  const payload = {
+    kind: 'estimate',
+    estimate_id: estimate.id,
+    estimate_number: estimate.estimate_number,
+    status: estimate.status,
+    total_amount: Number(estimate.total_amount || 0),
+    approved: estimate.status === 'approved',
+    pdf_url: finalPdfUrl,
   };
 
+  const summary = `Estimate ${estimate.estimate_number} ${estimate.status} for $${Number(
+    estimate.total_amount || 0
+  ).toFixed(2)}`;
+
+  const mirrorRow = {
+    customer_id: estimate.customer_id,
+    estimate_id: estimate.id,
+    invoice_id: null,
+    service_type: 'estimate',
+    service_date: estimate.estimate_date,
+    technician_name: estimate.tech_name,
+    summary,
+    pdf_path: finalPdfUrl,
+    payload,
+    completed_at: new Date().toISOString(),
+  };
+
+  const { data: updatedRows, error: updateError } = await supabase
+    .from('services_completed')
+    .update(mirrorRow)
+    .eq('estimate_id', estimate.id)
+    .select('id');
+
+  if (updateError) throw updateError;
+
+  if (updatedRows && updatedRows.length > 0) return;
+
+  const { error: insertError } = await supabase
+    .from('services_completed')
+    .insert(mirrorRow);
+
+  if (insertError) {
+    if (insertError.code === '23505') {
+      const { error: retryUpdateError } = await supabase
+        .from('services_completed')
+        .update(mirrorRow)
+        .eq('estimate_id', estimate.id);
+
+      if (retryUpdateError) throw retryUpdateError;
+      return;
+    }
+
+    throw insertError;
+  }
+};
+  
+const handleEstimateDecision = async (
+  serviceId: string,
+  estimateId: string | null | undefined,
+  newStatus: 'approved' | 'rejected'
+) => {
+  if (!estimateId) return;
+
+  setActionError(null);
+  setActionBusyId(serviceId);
+
+  try {
+    const { error: estimateUpdateError } = await supabase
+      .from('estimates')
+      .update({
+        status: newStatus,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', estimateId);
+
+    if (estimateUpdateError) throw estimateUpdateError;
+
+    await syncEstimateToServicesCompleted(estimateId, null);
+
+    if (newStatus === 'approved') {
+      await createInvoiceFromEstimateOnDashboard(estimateId);
+    }
+
+    const { data: refreshedServices, error: refreshedServicesError } = await supabase
+      .from('services_completed')
+      .select('*')
+      .eq('customer_id', customer?.id)
+      .order('completed_at', { ascending: false, nullsFirst: false })
+      .order('service_date', { ascending: false, nullsFirst: false });
+
+    if (refreshedServicesError) throw refreshedServicesError;
+
+    setServices((refreshedServices || []) as any[]);
+  } catch (e: any) {
+    setActionError(e?.message || 'Failed to update estimate');
+  } finally {
+    setActionBusyId(null);
+  }
+};
   const handlePayInvoice = (invoiceId: string | undefined | null) => {
     if (!invoiceId) return;
     navigate(`/checkout?invoiceId=${encodeURIComponent(invoiceId)}`);
