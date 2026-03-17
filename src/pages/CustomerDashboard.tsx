@@ -101,15 +101,16 @@ export default function CustomerDashboard() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [customer, setCustomer] = useState<Customer | null>(null);
-  const [portalCustomer, setPortalCustomer] = useState<PortalCustomer | null>(null);
-  const [memberships, setMemberships] = useState<CustomerMembership[]>([]);
-  const [services, setServices] = useState<ServiceCompleted[]>([]);
-  const [serviceDocs, setServiceDocs] = useState<ServiceDoc[]>([]);
-  const [loading, setLoading] = useState(true);
+ const [profile, setProfile] = useState<Profile | null>(null);
+const [customer, setCustomer] = useState<Customer | null>(null);
+const [portalCustomer, setPortalCustomer] = useState<PortalCustomer | null>(null);
+const [memberships, setMemberships] = useState<CustomerMembership[]>([]);
+const [services, setServices] = useState<ServiceCompleted[]>([]);
+const [serviceDocs, setServiceDocs] = useState<ServiceDoc[]>([]);
+const [loading, setLoading] = useState(true);
 
-  const [isEconst [contactForm, setContactForm] = useState({
+const [isEditingContact, setIsEditingContact] = useState(false);
+const [contactForm, setContactForm] = useState({
   email: '',
   phone: '',
   service_address: '',
@@ -117,15 +118,12 @@ export default function CustomerDashboard() {
   state: '',
   zip_code: '',
 });
-  ditingContact, setIsEditingContact] = useState(false);
-  const [contactForm, setContactForm] = useState({ email: '', phone: '' });
-  const [contactSaving, setContactSaving] = useState(false);
-  const [contactError, setContactError] = useState<string | null>(null);
-  const [contactSuccess, setContactSuccess] = useState<string | null>(null);
+const [contactSaving, setContactSaving] = useState(false);
+const [contactError, setContactError] = useState<string | null>(null);
+const [contactSuccess, setContactSuccess] = useState<string | null>(null);
 
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [actionBusyId, setActionBusyId] = useState<string | null>(null);
-
+const [actionError, setActionError] = useState<string | null>(null);
+const [actionBusyId, setActionBusyId] = useState<string | null>(null);
   useEffect(() => {
     const load = async () => {
       try {
