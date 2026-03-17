@@ -528,77 +528,7 @@ export default function CustomerDashboard() {
     return date.toISOString().split('T')[0];
   };
 
-  const createInvoiceFromEstimateOnDashboard = async (estimateId: string) => {
-    const { data: existingInvoice, error: existingInvoiceError } = await supabase
-      .from('crm_invoices')
-      .select('id, invoice_number')
-      .eq('estimate_id', estimateId)
-      .maybeSingle();
 
-    if (existingInvoiceError) throw existingInvoiceError;
-    if (existingInvoice) return existingInvoice;
-
-    const { data: estimate, error: estimateError } = await supabase
-      .from('estimates')
-      .select('*')
-      .eq('id', estimateId)
-      .single();
-
-    if (estimateError) throw estimateError;
-
-    const { data: estimateItems, error: estimateItemsError } = await supabase
-      .from('estimate_line_items')
-      .select('*')
-      .eq('estimate_id', estimateId)
-      .order('sort_order', { ascending: true });
-
-    if (estimateItemsError) throw estimateItemsError;
-
-    const invoiceNumber = await generateUniqueInvoiceNumber();
-    const today = new Date().toISOString().split('T')[0];
-    const dueDate = addDays(today, 7);
-    const totalAmount = Number((estimate as any).total_amount || 0);
-
-    const { data: invoice, error: invoiceError } = await supabase
-      .from('crm_invoices')
-      .insert({
-        invoice_number: invoiceNumber,
-        customer_id: (estimate as any).customer_id,
-        estimate_id: (estimate as any).id,
-        invoice_date: today,
-        due_date: dueDate,
-        work_completed_date: today,
-        tech_name: (estimate as any).tech_name || '',
-        notes: (estimate as any).notes || '',
-        status: 'sent',
-        total_amount: totalAmount,
-        amount_paid: 0,
-        amount_due: totalAmount,
-      })
-      .select()
-      .single();
-
-    if (invoiceError) throw invoiceError;
-
-    if (estimateItems && estimateItems.length > 0) {
-      const invoiceLineItems = estimateItems.map((item: any, index: number) => ({
-        invoice_id: (invoice as any).id,
-        description: item.description || '',
-        material_cost: Number(item.material_cost || 0),
-        labor_cost: Number(item.labor_cost || 0),
-        total_cost: Number(item.total_cost || 0),
-        sort_order: item.sort_order ?? index,
-      }));
-
-      const { error: lineError } = await supabase
-        .from('crm_invoice_line_items')
-        .insert(invoiceLineItems);
-
-      if (lineError) throw lineError;
-    }
-
-    return invoice;
-  };
 
 const syncEstimateToServicesCompleted = async (
   estimateId: string,
