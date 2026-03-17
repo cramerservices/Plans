@@ -100,7 +100,7 @@ export default function InvoiceCheckoutPage() {
     setProcessing(true);
 
     try {
-      const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-invoice-checkout-session`;
+      const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-invoice-checkout`;
 
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData.session?.access_token;
