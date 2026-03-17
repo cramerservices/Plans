@@ -109,7 +109,15 @@ export default function CustomerDashboard() {
   const [serviceDocs, setServiceDocs] = useState<ServiceDoc[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [isEditingContact, setIsEditingContact] = useState(false);
+  const [isEconst [contactForm, setContactForm] = useState({
+  email: '',
+  phone: '',
+  service_address: '',
+  city: '',
+  state: '',
+  zip_code: '',
+});
+  ditingContact, setIsEditingContact] = useState(false);
   const [contactForm, setContactForm] = useState({ email: '', phone: '' });
   const [contactSaving, setContactSaving] = useState(false);
   const [contactError, setContactError] = useState<string | null>(null);
@@ -239,14 +247,21 @@ export default function CustomerDashboard() {
 
         setPortalCustomer(loadedPortalCustomer);
 
-        setContactForm({
-          email:
-            normalizeEmail(profileRow?.email) ||
-            normalizeEmail(loadedPortalCustomer?.email) ||
-            normalizeEmail(loadedCustomer?.email) ||
-            '',
-          phone: loadedPortalCustomer?.phone || loadedCustomer?.phone || '',
-        });
+      setContactForm({
+  email:
+    normalizeEmail(profileRow?.email) ||
+    normalizeEmail(loadedPortalCustomer?.email) ||
+    normalizeEmail(loadedCustomer?.email) ||
+    '',
+  phone: loadedPortalCustomer?.phone || loadedCustomer?.phone || '',
+  service_address:
+    loadedCustomer?.service_address ||
+    loadedPortalCustomer?.service_address ||
+    '',
+  city: loadedCustomer?.city || loadedPortalCustomer?.city || '',
+  state: loadedCustomer?.state || loadedPortalCustomer?.state || '',
+  zip_code: loadedCustomer?.zip_code || loadedPortalCustomer?.zip_code || '',
+});
 
         let loadedMemberships: CustomerMembership[] = [];
 
@@ -432,33 +447,38 @@ export default function CustomerDashboard() {
 
         if (error) throw error;
       }
+if (portalCustomer?.id) {
+  const { error } = await supabase
+    .from('portal_customers')
+    .update({
+      email: normalizedEmail || null,
+      phone: contactForm.phone || null,
+      service_address: contactForm.service_address || null,
+      city: contactForm.city || null,
+      state: contactForm.state || null,
+      zip_code: contactForm.zip_code || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', portalCustomer.id);
 
-      if (portalCustomer?.id) {
-        const { error } = await supabase
-          .from('portal_customers')
-          .update({
-            email: normalizedEmail || null,
-            phone: contactForm.phone || null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', portalCustomer.id);
+  if (error) throw error;
+}
+if (customer?.id) {
+  const { error } = await supabase
+    .from('customers')
+    .update({
+      email: normalizedEmail || null,
+      phone: contactForm.phone || null,
+      service_address: contactForm.service_address || null,
+      city: contactForm.city || null,
+      state: contactForm.state || null,
+      zip_code: contactForm.zip_code || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', customer.id);
 
-        if (error) throw error;
-      }
-
-      if (customer?.id) {
-        const { error } = await supabase
-          .from('customers')
-          .update({
-            email: normalizedEmail || null,
-            phone: contactForm.phone || null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', customer.id);
-
-        if (error) throw error;
-      }
-
+  if (error) throw error;
+}
       setProfile((prev) =>
         prev
           ? ({
@@ -468,25 +488,33 @@ export default function CustomerDashboard() {
           : prev
       );
 
-      setPortalCustomer((prev) =>
-        prev
-          ? ({
-              ...prev,
-              email: normalizedEmail || prev.email,
-              phone: contactForm.phone || prev.phone,
-            } as PortalCustomer)
-          : prev
-      );
+    setPortalCustomer((prev) =>
+  prev
+    ? ({
+        ...prev,
+        email: normalizedEmail || prev.email,
+        phone: contactForm.phone || prev.phone,
+        service_address: contactForm.service_address || prev.service_address,
+        city: contactForm.city || prev.city,
+        state: contactForm.state || prev.state,
+        zip_code: contactForm.zip_code || prev.zip_code,
+      } as PortalCustomer)
+    : prev
+);
 
-      setCustomer((prev) =>
-        prev
-          ? ({
-              ...prev,
-              email: normalizedEmail || prev.email,
-              phone: contactForm.phone || prev.phone,
-            } as Customer)
-          : prev
-      );
+setCustomer((prev) =>
+  prev
+    ? ({
+        ...prev,
+        email: normalizedEmail || prev.email,
+        phone: contactForm.phone || prev.phone,
+        service_address: contactForm.service_address || prev.service_address,
+        city: contactForm.city || prev.city,
+        state: contactForm.state || prev.state,
+        zip_code: contactForm.zip_code || prev.zip_code,
+      } as Customer)
+    : prev
+);
 
       setContactSuccess('Saved.');
       setIsEditingContact(false);
@@ -1037,11 +1065,16 @@ const handleEstimateDecision = async (
                         setIsEditingContact(false);
                         setContactError(null);
                         setContactSuccess(null);
-                        setContactForm({
-                          email:
-                            profile?.email || portalCustomer?.email || customer?.email || '',
-                          phone: portalCustomer?.phone || customer?.phone || '',
-                        });
+                     setContactForm({
+  email:
+    profile?.email || portalCustomer?.email || customer?.email || '',
+  phone: portalCustomer?.phone || customer?.phone || '',
+  service_address:
+    customer?.service_address || portalCustomer?.service_address || '',
+  city: customer?.city || portalCustomer?.city || '',
+  state: customer?.state || portalCustomer?.state || '',
+  zip_code: customer?.zip_code || portalCustomer?.zip_code || '',
+});
                       }}
                       disabled={contactSaving}
                     >
@@ -1104,16 +1137,62 @@ const handleEstimateDecision = async (
                   )}
                 </div>
 
-                <div className={styles.contactItem}>
-                  <span className={styles.contactLabel}>Service Address:</span>
-                  <strong className={styles.contactValue}>
-                    {customer?.service_address
-                      ? formatAddress(customer)
-                      : portalCustomer?.service_address
-                      ? formatAddress(portalCustomer)
-                      : 'Not provided'}
-                  </strong>
-                </div>
+               <div className={styles.contactItem}>
+  <span className={styles.contactLabel}>Service Address:</span>
+  {!isEditingContact ? (
+    <strong className={styles.contactValue}>
+      {contactForm.service_address || contactForm.city || contactForm.state || contactForm.zip_code
+        ? formatAddress({
+            service_address: contactForm.service_address,
+            city: contactForm.city,
+            state: contactForm.state,
+            zip_code: contactForm.zip_code,
+          })
+        : 'Not provided'}
+    </strong>
+  ) : (
+    <div style={{ display: 'grid', gap: 10, width: '100%' }}>
+      <input
+        value={contactForm.service_address}
+        onChange={(e) =>
+          setContactForm((p) => ({ ...p, service_address: e.target.value }))
+        }
+        type="text"
+        placeholder="Street address"
+        className={styles.contactInput}
+      />
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 10 }}>
+        <input
+          value={contactForm.city}
+          onChange={(e) =>
+            setContactForm((p) => ({ ...p, city: e.target.value }))
+          }
+          type="text"
+          placeholder="City"
+          className={styles.contactInput}
+        />
+        <input
+          value={contactForm.state}
+          onChange={(e) =>
+            setContactForm((p) => ({ ...p, state: e.target.value }))
+          }
+          type="text"
+          placeholder="State"
+          className={styles.contactInput}
+        />
+        <input
+          value={contactForm.zip_code}
+          onChange={(e) =>
+            setContactForm((p) => ({ ...p, zip_code: e.target.value }))
+          }
+          type="text"
+          placeholder="ZIP"
+          className={styles.contactInput}
+        />
+      </div>
+    </div>
+  )}
+</div>
               </div>
             </div>
           </>
