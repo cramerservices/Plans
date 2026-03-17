@@ -497,36 +497,6 @@ export default function CustomerDashboard() {
     }
   };
 
-  const generateUniqueInvoiceNumber = async () => {
-    let isUnique = false;
-    let newNumber = '';
-
-    while (!isUnique) {
-      const stamp = Date.now().toString().slice(-6);
-      const random = Math.floor(Math.random() * 900) + 100;
-      newNumber = `INV-${stamp}${random}`;
-
-      const { data, error } = await supabase
-        .from('crm_invoices')
-        .select('id')
-        .eq('invoice_number', newNumber)
-        .limit(1);
-
-      if (error) throw error;
-
-      if (!data || data.length === 0) {
-        isUnique = true;
-      }
-    }
-
-    return newNumber;
-  };
-
-  const addDays = (dateString: string, days: number) => {
-    const date = new Date(dateString);
-    date.setDate(date.getDate() + days);
-    return date.toISOString().split('T')[0];
-  };
 
 
 
