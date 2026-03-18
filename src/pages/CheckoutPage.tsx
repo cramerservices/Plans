@@ -6,7 +6,7 @@ import { MaintenancePlan, MembershipAgreement } from '../types';
 import {
   MINI_SPLIT_HEAD_TIERS,
   getMiniSplitTier,
-  isMiniSplitPlan,
+  isMiniSplitPlan, 
 } from '../lib/miniSplitPricing';
 import styles from './CheckoutPage.module.css';
 
