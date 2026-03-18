@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import { supabase } from '../lib/supabase';
 import { MaintenancePlan } from '../types';
@@ -7,11 +7,20 @@ import { MINI_SPLIT_HEAD_TIERS, isMiniSplitPlan } from '../lib/miniSplitPricing'
 import styles from './PlansPage.module.css';
 
 export default function PlansPage() {
+  const navigate = useNavigate();
+
   const [plans, setPlans] = useState<MaintenancePlan[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [activeMembership, setActiveMembership] = useState<any | null>(null);
+  const [membershipLoading, setMembershipLoading] = useState(true);
+
   useEffect(() => {
     fetchPlans();
+  }, []);
+
+  useEffect(() => {
+    loadActiveMembership();
   }, []);
 
   const fetchPlans = async () => {
@@ -36,13 +45,69 @@ export default function PlansPage() {
       setPlans((data as MaintenancePlan[]) || []);
     } catch (error: any) {
       console.error('Error fetching plans (raw):', error);
-      // Helpful extra in case the object shape is different
       console.error('Error message:', error?.message);
       console.error('Error code:', error?.code);
       console.error('Error details:', error?.details);
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadActiveMembership = async () => {
+    setMembershipLoading(true);
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const user = sessionData.session?.user;
+
+      if (!user?.id) {
+        setActiveMembership(null);
+        return;
+      }
+
+      const { data: membership, error } = await supabase
+        .from('customer_memberships')
+        .select('*, plan:maintenance_plans(*)')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      setActiveMembership(membership || null);
+    } catch (error) {
+      console.error('Error loading active membership:', error);
+      setActiveMembership(null);
+    } finally {
+      setMembershipLoading(false);
+    }
+  };
+
+  const handleSelectPlan = (plan: MaintenancePlan) => {
+    if (membershipLoading) return;
+
+    if (!activeMembership) {
+      navigate(`/checkout/${plan.id}`);
+      return;
+    }
+
+    const currentPlanId = activeMembership.plan_id;
+    const currentPlanName = activeMembership.plan?.name || 'current plan';
+
+    if (currentPlanId === plan.id) {
+      alert(`You already have the ${plan.name} plan active on your account.`);
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `You currently have the ${currentPlanName} plan.\n\nIf you continue, your old plan will be removed from your account immediately and replaced with ${plan.name}.\n\nDo you want to continue?`
+    );
+
+    if (!confirmed) return;
+
+    navigate(`/checkout/${plan.id}?replacePlan=1`);
   };
 
   if (loading) {
@@ -87,17 +152,19 @@ export default function PlansPage() {
 
                     <h2 className={styles.planName}>{plan.name}</h2>
 
-                    {/* description might not exist yet in your DB */}
                     {(plan as any).description ? (
                       <p className={styles.planDescription}>{(plan as any).description}</p>
                     ) : null}
 
                     <div className={styles.pricing}>
-                      <span className={styles.price}>${isMiniSplit ? MINI_SPLIT_HEAD_TIERS[0].amount : plan.price}</span>
+                      <span className={styles.price}>
+                        ${isMiniSplit ? MINI_SPLIT_HEAD_TIERS[0].amount : plan.price}
+                      </span>
                       <span className={styles.frequency}>
                         /{billingFrequency === 'annual' ? 'year' : 'semi-annual'}
                       </span>
                     </div>
+
                     {isMiniSplit && (
                       <div className={styles.detailItem}>
                         <strong>Mini split:</strong> 4–9 heads ($340 to $525/year)
@@ -122,16 +189,23 @@ export default function PlansPage() {
                       <h3>Plan Features:</h3>
                       <ul className={styles.featuresList}>
                         {features.length ? (
-                          features.map((feature: string, index: number) => <li key={index}>{feature}</li>)
+                          features.map((feature: string, index: number) => (
+                            <li key={index}>{feature}</li>
+                          ))
                         ) : (
                           <li>Details coming soon.</li>
                         )}
                       </ul>
                     </div>
 
-                    <Link to={`/checkout/${plan.id}`} className={styles.selectButton}>
-                      Select Plan
-                    </Link>
+                    <button
+                      type="button"
+                      className={styles.selectButton}
+                      onClick={() => handleSelectPlan(plan)}
+                      disabled={membershipLoading}
+                    >
+                      {membershipLoading ? 'Checking...' : 'Select Plan'}
+                    </button>
                   </div>
                 );
               })
