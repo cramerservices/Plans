@@ -148,12 +148,14 @@
 
 .reportButton,
 .reportButtonSecondary {
+  display: block;
   width: 100%;
   border-radius: 0.5rem;
   padding: 0.85rem 1rem;
   font-size: 0.95rem;
   font-weight: 600;
   text-align: center;
+  text-decoration: none;
   cursor: pointer;
   transition: all 0.2s;
 }
