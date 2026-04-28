@@ -53,8 +53,8 @@ export default function HomePage() {
               <div className={styles.exampleBox}>
                 <h4>Sample Summary Report:</h4>
                 <div className={styles.summaryReportButtons}>
-          <a
-  href="/tuneup-summary (10).pdf"
+<a
+  href="/Plans/tuneup-summary.pdf"
   target="_blank"
   rel="noopener noreferrer"
   className={styles.reportButton}
