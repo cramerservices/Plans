@@ -32,16 +32,26 @@ export default function HomePage() {
               <p className={styles.featureDescription}>
                 Unlike other companies, we provide a detailed Free Work List with every service—showing you exactly what maintenance tasks we can perform at no additional charge during your visit.
               </p>
-              <div className={styles.exampleBox}>
-                <h4>Example Work List Items:</h4>
-                <ul className={styles.exampleList}>
-                  <li>Replace air filter</li>
-                  <li>Clean condensate drain</li>
-                  <li>Tighten electrical connections</li>
-                  <li>Lubricate moving parts</li>
-                  <li>Test thermostat operation</li>
-                </ul>
-              </div>
+             <div className={styles.exampleBox}>
+  <h4>Free Work List:</h4>
+
+  <a
+    href="/Plans/free-work-list.png"
+    target="_blank"
+    rel="noopener noreferrer"
+    className={styles.workListPreviewLink}
+  >
+    <img
+      src="/Plans/free-work-list.png"
+      alt="Free Work List included with maintenance plan"
+      className={styles.workListPreviewImage}
+    />
+  </a>
+
+  <p className={styles.previewNote}>
+    Click image to view full list.
+  </p>
+</div>
             </div>
 
             <div className={styles.featureCard}>
