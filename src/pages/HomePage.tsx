@@ -53,12 +53,12 @@ export default function HomePage() {
               <div className={styles.exampleBox}>
                 <h4>Sample Summary Report:</h4>
                 <div className={styles.summaryReportButtons}>
-                  <button type="button" className={styles.reportButton}>
+                  <Link to="/plans" className={styles.reportButton}>
                     View Example Summary Tune-Up Report
-                  </button>
-                  <button type="button" className={styles.reportButtonSecondary}>
+                  </Link>
+                  <Link to="/plans" className={styles.reportButtonSecondary}>
                     See Detailed Tune-Up Summary Report
-                  </button>
+                  </Link>
                 </div>
               </div>
             </div>
