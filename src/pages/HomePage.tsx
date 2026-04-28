@@ -52,26 +52,13 @@ export default function HomePage() {
               </p>
               <div className={styles.exampleBox}>
                 <h4>Sample Summary Report:</h4>
-                <div className={styles.summaryExample}>
-                  <div className={styles.summaryHeader}>
-                    <strong>Tune-Up Completed: Fall 2024</strong>
-                    <span>Technician: John Smith</span>
-                  </div>
-                  <div className={styles.summarySection}>
-                    <strong>Safety Checks:</strong>
-                    <p>✓ Carbon monoxide test: PASSED</p>
-                    <p>✓ Gas leak inspection: PASSED</p>
-                  </div>
-                  <div className={styles.summarySection}>
-                    <strong>Performance:</strong>
-                    <p>✓ System efficiency: 94%</p>
-                    <p>✓ Airflow: Optimal</p>
-                  </div>
-                  <div className={styles.summarySection}>
-                    <strong>Recommendations:</strong>
-                    <p>• Consider upgrading thermostat to smart model</p>
-                    <p>• Duct cleaning recommended within 6 months</p>
-                  </div>
+                <div className={styles.summaryReportButtons}>
+                  <button type="button" className={styles.reportButton}>
+                    View Example Summary Tune-Up Report
+                  </button>
+                  <button type="button" className={styles.reportButtonSecondary}>
+                    See Detailed Tune-Up Summary Report
+                  </button>
                 </div>
               </div>
             </div>
