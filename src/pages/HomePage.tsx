@@ -53,9 +53,14 @@ export default function HomePage() {
               <div className={styles.exampleBox}>
                 <h4>Sample Summary Report:</h4>
                 <div className={styles.summaryReportButtons}>
-                  <Link to="/plans" className={styles.reportButton}>
-                    View Example Summary Tune-Up Report
-                  </Link>
+          <a
+  href="/tuneup-summary (10).pdf"
+  target="_blank"
+  rel="noopener noreferrer"
+  className={styles.reportButton}
+>
+  View Example Summary Tune-Up Report
+</a>
                   <Link to="/plans" className={styles.reportButtonSecondary}>
                     See Detailed Tune-Up Summary Report
                   </Link>
