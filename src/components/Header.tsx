@@ -20,7 +20,7 @@ export default function Header() {
       <div className={styles.container}>
      <Link to="/" className={styles.logo}>
   <img
-    src="/Plans/public/LogoNameTrans.png"
+   src="/Plans/LogoNameTrans.png"
     alt="Cramer Services"
     className={styles.logoImage}
   />
