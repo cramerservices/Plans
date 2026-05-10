@@ -18,9 +18,13 @@ export default function Header() {
   return (
     <header className={styles.header}>
       <div className={styles.container}>
-        <Link to="/" className={styles.logo}>
-          HVAC Pro
-        </Link>
+     <Link to="/" className={styles.logo}>
+  <img
+    src="/Plans/public/LogoNameTrans.png"
+    alt="Cramer Services"
+    className={styles.logoImage}
+  />
+</Link>
 
         <nav className={styles.nav}>
           <Link to="/plans" className={styles.navLink}>Plans</Link>
