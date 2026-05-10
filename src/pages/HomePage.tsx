@@ -71,9 +71,14 @@ export default function HomePage() {
 >
   View Example Summary Tune-Up Report
 </a>
-                  <Link to="/plans" className={styles.reportButtonSecondary}>
-                    See Detailed Tune-Up Summary Report
-                  </Link>
+               <a
+  href="/Plans/detailed-tuneup-summary.pdf"
+  target="_blank"
+  rel="noopener noreferrer"
+  className={styles.reportButtonSecondary}
+>
+  See Detailed Tune-Up Summary Report
+</a>
                 </div>
               </div>
             </div>
