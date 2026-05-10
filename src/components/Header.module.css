@@ -16,10 +16,15 @@
 }
 
 .logo {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #2c5282;
-  transition: color 0.2s;
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.logoImage {
+  height: 52px;
+  width: auto;
+  display: block;
 }
 
 .logo:hover {
@@ -61,7 +66,9 @@
   .container {
     padding: 1rem;
   }
-
+.logoImage {
+  height: 42px;
+}
   .nav {
     gap: 1rem;
   }
