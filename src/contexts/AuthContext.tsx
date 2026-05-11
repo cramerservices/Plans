@@ -15,8 +15,36 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-function isAdminUser(user: User | null) {
-  return user?.app_metadata?.role === 'admin';
+const ADMIN_EMAIL = 'cramerservicesllc@gmail.com';
+
+async function checkAdminAccess(user: User | null): Promise<boolean> {
+  if (!user?.email) return false;
+
+  const cleanEmail = normalizeEmail(user.email);
+
+  // Backup hard-coded admin check so you do not get locked out.
+  if (cleanEmail === ADMIN_EMAIL) {
+    return true;
+  }
+
+  // Also allow admin access from auth metadata if you ever set it later.
+  if (user.app_metadata?.role === 'admin') {
+    return true;
+  }
+
+  // Main admin check from public.profiles.role.
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('email', cleanEmail)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Admin role check failed:', error);
+    return false;
+  }
+
+  return data?.role === 'admin';
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -28,14 +56,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    const syncAuthState = (currentSession: Session | null) => {
+    const syncAuthState = async (currentSession: Session | null) => {
       const currentUser = currentSession?.user ?? null;
 
       setSession(currentSession);
       setUser(currentUser);
-      setIsAdmin(isAdminUser(currentUser));
-      setLoading(false);
 
+      const adminAccess = await checkAdminAccess(currentUser);
+
+      if (!mounted) return;
+
+      setIsAdmin(adminAccess);
+      setLoading(false);
     };
 
     const loadSession = async () => {
@@ -48,7 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (!mounted) return;
 
-        syncAuthState(data.session ?? null);
+        await syncAuthState(data.session ?? null);
       } catch (err) {
         console.error('loadSession failed:', err);
         if (mounted) {
@@ -63,7 +95,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       if (!mounted) return;
-
       syncAuthState(nextSession ?? null);
     });
 
@@ -99,6 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (error) {
       const canRecoverFromDbTriggerError = /database error saving new user/i.test(error.message || '');
+
       if (!canRecoverFromDbTriggerError) {
         throw error;
       }
@@ -138,8 +170,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
+
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
+
   return context;
 }
