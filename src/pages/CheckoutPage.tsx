@@ -6,7 +6,7 @@ import { MaintenancePlan, MembershipAgreement } from '../types';
 import {
   MINI_SPLIT_HEAD_TIERS,
   getMiniSplitTier,
-  isMiniSplitPlan, 
+  isMiniSplitPlan,
 } from '../lib/miniSplitPricing';
 import styles from './CheckoutPage.module.css';
 
@@ -111,22 +111,63 @@ export default function CheckoutPage() {
     });
   };
 
+  const isOneTimeTuneUp = (selectedPlan: MaintenancePlan | null) => {
+    const planName = String((selectedPlan as any)?.name || '').toLowerCase();
+    const billingFrequency = String((selectedPlan as any)?.billing_frequency || '').toLowerCase();
+
+    return (
+      billingFrequency === 'one_time' ||
+      billingFrequency === 'one-time' ||
+      billingFrequency === 'once' ||
+      planName.includes('one-time') ||
+      planName.includes('one time')
+    );
+  };
+
   const isMiniSplit = isMiniSplitPlan(plan?.name);
+  const oneTimeTuneUp = isOneTimeTuneUp(plan);
+
   const selectedMiniSplitTier = getMiniSplitTier(miniSplitHeads);
+
   const displayedPrice = isMiniSplit
     ? selectedMiniSplitTier?.amount ?? plan?.price ?? 0
     : plan?.price ?? 0;
 
   const currentPlanId = activeMembership?.plan_id || null;
   const currentPlanName = activeMembership?.plan?.name || 'current plan';
-  const samePlanSelected = !!plan?.id && !!currentPlanId && currentPlanId === plan.id;
+
+  const samePlanSelected =
+    !oneTimeTuneUp && !!plan?.id && !!currentPlanId && currentPlanId === plan.id;
+
   const replacingDifferentPlan =
-    !!plan?.id && !!currentPlanId && currentPlanId !== plan.id;
+    !oneTimeTuneUp && !!plan?.id && !!currentPlanId && currentPlanId !== plan.id;
+
+  const billingLabel = oneTimeTuneUp
+    ? 'One-time payment'
+    : plan?.billing_frequency === 'annual'
+    ? 'Annually'
+    : 'Semi-annually';
+
+  const totalLabel = oneTimeTuneUp ? `$${displayedPrice}` : `$${displayedPrice}/year`;
+
+  const paymentNote = oneTimeTuneUp
+    ? 'You will be redirected to secure Stripe checkout to pay for your one-time HVAC tune-up.'
+    : 'You will be redirected to secure Stripe checkout to enter your card and start your recurring annual plan.';
+
+  const submitButtonText = membershipLoading
+    ? 'Checking current plan...'
+    : processing
+    ? 'Redirecting to Stripe...'
+    : samePlanSelected
+    ? 'You Already Have This Plan'
+    : oneTimeTuneUp
+    ? `Continue to Stripe - $${displayedPrice}`
+    : `Continue to Stripe - $${displayedPrice}/year`;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!agreedToTerms) {
+    if (!oneTimeTuneUp && !agreedToTerms) {
       alert('Please agree to the membership terms to continue.');
       return;
     }
@@ -177,9 +218,10 @@ export default function CheckoutPage() {
       const payload = {
         planId,
         ...formData,
-        agreementSignedAt: new Date().toISOString(),
-        replacePlan: replacingDifferentPlan,
-        currentPlanId: currentPlanId || null,
+        checkoutType: oneTimeTuneUp ? 'one_time_tune_up' : 'membership_purchase',
+        agreementSignedAt: oneTimeTuneUp ? null : new Date().toISOString(),
+        replacePlan: oneTimeTuneUp ? false : replacingDifferentPlan,
+        currentPlanId: oneTimeTuneUp ? null : currentPlanId || null,
         ...(isMiniSplit ? { miniSplitHeads } : {}),
       };
 
@@ -265,9 +307,15 @@ export default function CheckoutPage() {
               <h3>{plan.name}</h3>
               <p className={styles.planDesc}>{plan.description}</p>
 
+              {oneTimeTuneUp && (
+                <div className={styles.miniSplitCallout}>
+                  This is a one-time HVAC tune-up. No annual membership or recurring billing is required.
+                </div>
+              )}
+
               {isMiniSplit && (
                 <div className={styles.miniSplitCallout}>
-                  Mini split pricing is based on head count (4–9 heads).
+                  Mini split pricing is based on head count, 4–9 heads.
                 </div>
               )}
 
@@ -288,31 +336,34 @@ export default function CheckoutPage() {
                     <strong>{miniSplitHeads}</strong>
                   </div>
                 )}
+
                 <div className={styles.summaryItem}>
-                  <span>Tune-ups per year:</span>
-                  <strong>{plan.tune_ups_per_year}</strong>
+                  <span>{oneTimeTuneUp ? 'Tune-up visits:' : 'Tune-ups per year:'}</span>
+                  <strong>{(plan as any).tune_ups_per_year ?? 1}</strong>
                 </div>
-                <div className={styles.summaryItem}>
-                  <span>Discount on repairs:</span>
-                  <strong>{plan.discount_percentage}%</strong>
-                </div>
+
+                {!oneTimeTuneUp && (
+                  <div className={styles.summaryItem}>
+                    <span>Discount on repairs:</span>
+                    <strong>{plan.discount_percentage}%</strong>
+                  </div>
+                )}
+
                 <div className={styles.summaryItem}>
                   <span>Billing:</span>
-                  <strong>
-                    {plan.billing_frequency === 'annual' ? 'Annually' : 'Semi-annually'}
-                  </strong>
+                  <strong>{billingLabel}</strong>
                 </div>
               </div>
 
               <div className={styles.total}>
                 <span>Total:</span>
-                <strong>${displayedPrice}/year</strong>
+                <strong>{totalLabel}</strong>
               </div>
             </div>
           </div>
 
           <div className={styles.checkoutForm}>
-            <h2>Complete Your Purchase</h2>
+            <h2>{oneTimeTuneUp ? 'Schedule Your Tune-Up' : 'Complete Your Purchase'}</h2>
 
             <form onSubmit={handleSubmit}>
               <div className={styles.section}>
@@ -425,46 +476,39 @@ export default function CheckoutPage() {
 
               <div className={styles.section}>
                 <h3>Payment Information</h3>
-                <div className={styles.paymentNote}>
-                  You will be redirected to secure Stripe checkout to enter your card and
-                  start your recurring annual plan.
-                </div>
+                <div className={styles.paymentNote}>{paymentNote}</div>
               </div>
 
-              <div className={styles.agreement}>
-                <label className={styles.checkbox}>
-                  <input
-                    type="checkbox"
-                    checked={agreedToTerms}
-                    onChange={(e) => setAgreedToTerms(e.target.checked)}
-                    required
-                    disabled={samePlanSelected}
-                  />
-                  <span>
-                    I agree to the{' '}
-                    <button
-                      type="button"
-                      className={styles.agreementLink}
-                      onClick={() => setShowAgreement(true)}
-                    >
-                      Membership Agreement
-                    </button>
-                  </span>
-                </label>
-              </div>
+              {!oneTimeTuneUp && (
+                <div className={styles.agreement}>
+                  <label className={styles.checkbox}>
+                    <input
+                      type="checkbox"
+                      checked={agreedToTerms}
+                      onChange={(e) => setAgreedToTerms(e.target.checked)}
+                      required
+                      disabled={samePlanSelected}
+                    />
+                    <span>
+                      I agree to the{' '}
+                      <button
+                        type="button"
+                        className={styles.agreementLink}
+                        onClick={() => setShowAgreement(true)}
+                      >
+                        Membership Agreement
+                      </button>
+                    </span>
+                  </label>
+                </div>
+              )}
 
               <button
                 type="submit"
                 className={styles.submitButton}
                 disabled={processing || membershipLoading || samePlanSelected}
               >
-                {membershipLoading
-                  ? 'Checking current plan...'
-                  : processing
-                  ? 'Redirecting to Stripe...'
-                  : samePlanSelected
-                  ? 'You Already Have This Plan'
-                  : `Continue to Stripe - $${displayedPrice}/year`}
+                {submitButtonText}
               </button>
 
               {samePlanSelected && (
