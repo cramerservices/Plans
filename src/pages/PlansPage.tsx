@@ -6,6 +6,8 @@ import { MaintenancePlan } from '../types';
 import { MINI_SPLIT_HEAD_TIERS, isMiniSplitPlan } from '../lib/miniSplitPricing';
 import styles from './PlansPage.module.css';
 
+type PlanTab = 'memberships' | 'oneTime';
+
 export default function PlansPage() {
   const navigate = useNavigate();
 
@@ -14,6 +16,8 @@ export default function PlansPage() {
 
   const [activeMembership, setActiveMembership] = useState<any | null>(null);
   const [membershipLoading, setMembershipLoading] = useState(true);
+
+  const [activeTab, setActiveTab] = useState<PlanTab>('memberships');
 
   useEffect(() => {
     fetchPlans();
@@ -85,8 +89,33 @@ export default function PlansPage() {
     }
   };
 
+  const isOneTimeTuneUp = (plan: MaintenancePlan) => {
+    const planName = String((plan as any).name || '').toLowerCase();
+    const billingFrequency = String((plan as any).billing_frequency || '').toLowerCase();
+
+    return (
+      billingFrequency === 'one_time' ||
+      billingFrequency === 'one-time' ||
+      billingFrequency === 'once' ||
+      planName.includes('one-time') ||
+      planName.includes('one time')
+    );
+  };
+
+  const membershipPlans = plans.filter((plan) => !isOneTimeTuneUp(plan));
+  const oneTimePlans = plans.filter((plan) => isOneTimeTuneUp(plan));
+
+  const visiblePlans = activeTab === 'memberships' ? membershipPlans : oneTimePlans;
+
   const handleSelectPlan = (plan: MaintenancePlan) => {
     if (membershipLoading) return;
+
+    const oneTimePlan = isOneTimeTuneUp(plan);
+
+    if (oneTimePlan) {
+      navigate(`/checkout/${plan.id}?type=one_time`);
+      return;
+    }
 
     if (!activeMembership) {
       navigate(`/checkout/${plan.id}`);
@@ -134,21 +163,52 @@ export default function PlansPage() {
 
       <section className={styles.plans}>
         <div className={styles.container}>
+          <div className={styles.planTabs}>
+            <button
+              type="button"
+              className={`${styles.planTab} ${activeTab === 'memberships' ? styles.activePlanTab : ''}`}
+              onClick={() => setActiveTab('memberships')}
+            >
+              Maintenance Plans
+            </button>
+
+            <button
+              type="button"
+              className={`${styles.planTab} ${activeTab === 'oneTime' ? styles.activePlanTab : ''}`}
+              onClick={() => setActiveTab('oneTime')}
+            >
+              One-Time Tune-Up
+            </button>
+          </div>
+
+          {activeTab === 'oneTime' && (
+            <div className={styles.tabIntro}>
+              Need service without signing up for a yearly plan? Schedule a one-time HVAC tune-up for $200.
+            </div>
+          )}
+
           <div className={styles.plansGrid}>
-            {plans.length === 0 ? (
+            {visiblePlans.length === 0 ? (
               <div className={styles.loading}>
-                No plans found. (If you just set up Supabase, make sure the table exists and has rows.)
+                {activeTab === 'oneTime'
+                  ? 'No one-time tune-up option found. Add the One-Time Tune-Up row in Supabase and make sure it is active.'
+                  : 'No plans found. Make sure the maintenance_plans table exists and has active rows.'}
               </div>
             ) : (
-              plans.map((plan) => {
+              visiblePlans.map((plan) => {
                 const features = Array.isArray((plan as any).features) ? (plan as any).features : [];
                 const billingFrequency = (plan as any).billing_frequency || 'annual';
                 const tuneUpsPerYear = (plan as any).tune_ups_per_year ?? 2;
                 const isMiniSplit = isMiniSplitPlan(plan.name);
+                const oneTimePlan = isOneTimeTuneUp(plan);
 
                 return (
                   <div key={plan.id} className={styles.planCard}>
-                    {(plan as any).priority_service && <div className={styles.badge}>Most Popular</div>}
+                    {(plan as any).priority_service && !oneTimePlan && (
+                      <div className={styles.badge}>Most Popular</div>
+                    )}
+
+                    {oneTimePlan && <div className={styles.badge}>No Membership Required</div>}
 
                     <h2 className={styles.planName}>{plan.name}</h2>
 
@@ -161,7 +221,9 @@ export default function PlansPage() {
                         ${isMiniSplit ? MINI_SPLIT_HEAD_TIERS[0].amount : plan.price}
                       </span>
                       <span className={styles.frequency}>
-                        /{billingFrequency === 'annual' ? 'year' : 'semi-annual'}
+                        {oneTimePlan
+                          ? '/visit'
+                          : `/${billingFrequency === 'annual' ? 'year' : 'semi-annual'}`}
                       </span>
                     </div>
 
@@ -173,20 +235,31 @@ export default function PlansPage() {
 
                     <div className={styles.planDetails}>
                       <div className={styles.detailItem}>
-                        <strong>{tuneUpsPerYear}</strong> tune-ups per year
+                        <strong>{tuneUpsPerYear}</strong>{' '}
+                        {oneTimePlan ? 'tune-up visit' : 'tune-ups per year'}
                       </div>
-                      <div className={styles.detailItem}>
-                        <strong>{(plan as any).discount_percentage ?? 0}%</strong> discount on repairs
-                      </div>
-                      {(plan as any).priority_service && (
+
+                      {!oneTimePlan && (
+                        <div className={styles.detailItem}>
+                          <strong>{(plan as any).discount_percentage ?? 0}%</strong> discount on repairs
+                        </div>
+                      )}
+
+                      {(plan as any).priority_service && !oneTimePlan && (
                         <div className={styles.detailItem}>
                           <strong>Priority</strong> emergency service
+                        </div>
+                      )}
+
+                      {oneTimePlan && (
+                        <div className={styles.detailItem}>
+                          <strong>No contract</strong> or annual membership
                         </div>
                       )}
                     </div>
 
                     <div className={styles.features}>
-                      <h3>Plan Features:</h3>
+                      <h3>{oneTimePlan ? 'Included With Tune-Up:' : 'Plan Features:'}</h3>
                       <ul className={styles.featuresList}>
                         {features.length ? (
                           features.map((feature: string, index: number) => (
@@ -204,7 +277,11 @@ export default function PlansPage() {
                       onClick={() => handleSelectPlan(plan)}
                       disabled={membershipLoading}
                     >
-                      {membershipLoading ? 'Checking...' : 'Select Plan'}
+                      {membershipLoading
+                        ? 'Checking...'
+                        : oneTimePlan
+                          ? 'Schedule Tune-Up'
+                          : 'Select Plan'}
                     </button>
                   </div>
                 );
@@ -245,7 +322,7 @@ export default function PlansPage() {
             <div className={styles.checklistCategory}>
               <h3>Cleaning & Maintenance</h3>
               <ul>
-                <li>Coil cleaning (evaporator & condenser)</li>
+                <li>Coil cleaning, evaporator and condenser</li>
                 <li>Condensate drain clearing</li>
                 <li>Filter replacement</li>
                 <li>Motor lubrication</li>
