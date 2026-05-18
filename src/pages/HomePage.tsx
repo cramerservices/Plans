@@ -13,7 +13,7 @@ export default function HomePage() {
             Protect Your Home Comfort Year-Round
           </h1>
           <p className={styles.heroSubtitle}>
-            Join thousands of homeowners who trust us for reliable HVAC maintenance
+         Reliable HVAC tune-ups and maintenance plans designed to keep your home comfortable year-round
           </p>
           <Link to="/plans" className={styles.ctaButton}>
             View Plans
