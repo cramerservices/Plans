@@ -10,6 +10,10 @@ import {
 } from '../lib/miniSplitPricing';
 import styles from './CheckoutPage.module.css';
 
+const EMAILJS_PUBLIC_KEY = 'TDIki3rqftcomcjJC';
+const EMAILJS_SERVICE_ID = 'service_ebrskb5';
+const EMAILJS_TEMPLATE_ID = 'template_b95xw46';
+
 export default function CheckoutPage() {
   const { planId } = useParams<{ planId: string }>();
   const [searchParams] = useSearchParams();
@@ -151,21 +155,141 @@ export default function CheckoutPage() {
   const totalLabel = oneTimeTuneUp ? `$${displayedPrice}` : `$${displayedPrice}/year`;
 
   const paymentNote = oneTimeTuneUp
-    ? 'You will be redirected to secure Stripe checkout to pay for your one-time HVAC tune-up.'
-    : 'You will be redirected to secure Stripe checkout to enter your card and start your recurring annual plan.';
+    ? 'After you complete this form, you will be redirected to secure Stripe checkout to pay for your one-time HVAC tune-up.'
+    : 'After you complete this form, you will be redirected to secure Stripe checkout to enter your card and start your recurring annual plan.';
 
   const submitButtonText = membershipLoading
     ? 'Checking current plan...'
     : processing
-    ? 'Redirecting to Stripe...'
+    ? 'Saving request...'
     : samePlanSelected
     ? 'You Already Have This Plan'
     : oneTimeTuneUp
     ? `Continue to Stripe - $${displayedPrice}`
     : `Continue to Stripe - $${displayedPrice}/year`;
 
+  const sendEmailJsNotification = async (leadDetails: {
+    subject: string;
+    name: string;
+    phone: string;
+    email: string;
+    service: string;
+    details: string;
+    message: string;
+    time: string;
+  }) => {
+    const response = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        service_id: EMAILJS_SERVICE_ID,
+        template_id: EMAILJS_TEMPLATE_ID,
+        user_id: EMAILJS_PUBLIC_KEY,
+        template_params: leadDetails,
+      }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      throw new Error(text || 'EmailJS notification failed.');
+    }
+  };
+
+  const saveLeadAndSendEmail = async () => {
+    if (!plan) return;
+
+    const serviceName = oneTimeTuneUp
+      ? 'One-Time HVAC Tune-Up'
+      : String(plan.name || 'Maintenance Plan');
+
+    const fullAddress = `${formData.serviceAddress}, ${formData.city}, ${formData.state} ${formData.zipCode}`;
+
+    const details = [
+      `Plan selected: ${plan.name}`,
+      `Price shown: ${totalLabel}`,
+      `Billing: ${billingLabel}`,
+      `Service address: ${fullAddress}`,
+      isMiniSplit ? `Mini split heads: ${miniSplitHeads}` : '',
+      oneTimeTuneUp
+        ? 'Customer is requesting a one-time tune-up and will be redirected to Stripe.'
+        : 'Customer is purchasing a maintenance plan and will be redirected to Stripe.',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    const emailData = {
+      subject: oneTimeTuneUp
+        ? 'New One-Time Tune-Up Request'
+        : `New Maintenance Plan Checkout - ${plan.name}`,
+      name: formData.fullName.trim(),
+      phone: formData.phone.trim(),
+      email: formData.email.trim().toLowerCase(),
+      service: serviceName,
+      details,
+      message: details,
+      time: new Date().toLocaleString(),
+    };
+
+    const { error: leadError } = await supabase.from('crm_leads').insert([
+      {
+        full_name: formData.fullName.trim(),
+        phone: formData.phone.trim(),
+        email: formData.email.trim().toLowerCase(),
+        service_type: serviceName,
+        details,
+        status: 'pending',
+        source: oneTimeTuneUp
+          ? 'plans_one_time_tune_up_checkout'
+          : 'plans_membership_checkout',
+      },
+    ]);
+
+    if (leadError) {
+      throw leadError;
+    }
+
+    await sendEmailJsNotification(emailData);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!formData.fullName.trim()) {
+      alert('Please enter your full name.');
+      return;
+    }
+
+    if (!formData.email.trim()) {
+      alert('Please enter your email.');
+      return;
+    }
+
+    if (!formData.phone.trim()) {
+      alert('Please enter your phone number.');
+      return;
+    }
+
+    if (!formData.serviceAddress.trim()) {
+      alert('Please enter the service address.');
+      return;
+    }
+
+    if (!formData.city.trim()) {
+      alert('Please enter the city.');
+      return;
+    }
+
+    if (!formData.state.trim()) {
+      alert('Please enter the state.');
+      return;
+    }
+
+    if (!formData.zipCode.trim()) {
+      alert('Please enter the ZIP code.');
+      return;
+    }
 
     if (!oneTimeTuneUp && !agreedToTerms) {
       alert('Please agree to the membership terms to continue.');
@@ -205,6 +329,8 @@ export default function CheckoutPage() {
     setProcessing(true);
 
     try {
+      await saveLeadAndSendEmail();
+
       const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-checkout-session`;
 
       const { data: sessionData } = await supabase.auth.getSession();
@@ -250,7 +376,7 @@ export default function CheckoutPage() {
     } catch (error) {
       console.error('Error creating checkout session:', error);
       alert(
-        'There was an error starting Stripe checkout. Make sure Stripe is configured and try again.'
+        'There was an error saving your request or starting Stripe checkout. Please try again or email cramerservicesllc@gmail.com.'
       );
     } finally {
       setProcessing(false);
