@@ -140,7 +140,7 @@ export default function HomePage() {
 
       <footer className={styles.footer}>
         <div className={styles.container}>
-          <p>&copy; 2024 HVAC Pro. All rights reserved.</p>
+          <p>&copy; {new Date().getFullYear()} Cramer Services LLC. All rights reserved.</p>
         </div>
       </footer>
     </div>
