@@ -204,9 +204,9 @@ export default function PlansPage() {
 
                 return (
                   <div key={plan.id} className={styles.planCard}>
-                    {(plan as any).priority_service && !oneTimePlan && (
-                      <div className={styles.badge}>Most Popular</div>
-                    )}
+                  {String(plan.name || '').toLowerCase().includes('gold') && !oneTimePlan && (
+  <div className={styles.badge}>Most Popular</div>
+)}
 
                     {oneTimePlan && <div className={styles.badge}>No Membership Required</div>}
 
