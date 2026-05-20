@@ -14,6 +14,7 @@ export default function SuccessPage() {
   const [title, setTitle] = useState("Success");
   const [msg, setMsg] = useState("Finalizing your purchase...");
   const [showDashboardButton, setShowDashboardButton] = useState(false);
+  const [showScheduleButton, setShowScheduleButton] = useState(false);
 
   useEffect(() => {
     const params = getParamsFromHash();
@@ -40,9 +41,9 @@ export default function SuccessPage() {
     if (isOneTimeTuneUp) {
       setTitle("Thank you!");
       setMsg(
-        "Your payment was successful. You will receive a message soon to schedule your tune-up."
+        "Your payment was successful. You can now schedule your tune-up appointment."
       );
-      setShowDashboardButton(true);
+      setShowScheduleButton(true);
       return;
     }
 
@@ -114,6 +115,27 @@ export default function SuccessPage() {
     <div style={{ padding: 24, maxWidth: 720 }}>
       <h2>{title}</h2>
       <p>{msg}</p>
+
+      {showScheduleButton && (
+        <a
+          href="https://cramerservicesllc.com/schedule"
+          style={{
+            display: "inline-block",
+            marginTop: 16,
+            marginRight: 12,
+            padding: "10px 16px",
+            borderRadius: 8,
+            border: "none",
+            cursor: "pointer",
+            fontWeight: 700,
+            background: "#0d6efd",
+            color: "#fff",
+            textDecoration: "none",
+          }}
+        >
+          Schedule Tune-Up
+        </a>
+      )}
 
       {showDashboardButton && (
         <button
