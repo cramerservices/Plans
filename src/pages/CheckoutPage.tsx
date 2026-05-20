@@ -158,7 +158,7 @@ export default function CheckoutPage() {
     ? 'After you complete this form, you will be redirected to secure Stripe checkout to pay for your one-time HVAC tune-up.'
     : 'After you complete this form, you will be redirected to secure Stripe checkout to enter your card and start your recurring annual plan.';
 
-  const submitButtonText = membershipLoading
+  const submitButtonText = !oneTimeTuneUp && membershipLoading
     ? 'Checking current plan...'
     : processing
     ? 'Saving request...'
@@ -232,25 +232,33 @@ export default function CheckoutPage() {
       time: new Date().toLocaleString(),
     };
 
-    const { error: leadError } = await supabase.from('crm_leads').insert([
-      {
-        full_name: formData.fullName.trim(),
-        phone: formData.phone.trim(),
-        email: formData.email.trim().toLowerCase(),
-        service_type: serviceName,
-        details,
-        status: 'pending',
-        source: oneTimeTuneUp
-          ? 'plans_one_time_tune_up_checkout'
-          : 'plans_membership_checkout',
-      },
-    ]);
+    const { data: leadRow, error: leadError } = await supabase
+      .from('crm_leads')
+      .insert([
+        {
+          full_name: formData.fullName.trim(),
+          phone: formData.phone.trim(),
+          email: formData.email.trim().toLowerCase(),
+          service_type: serviceName,
+          details,
+          status: 'pending',
+          source: oneTimeTuneUp
+            ? 'plans_one_time_tune_up_checkout'
+            : 'plans_membership_checkout',
+          payment_status: 'unpaid',
+          checkout_status: 'checkout_started',
+        },
+      ])
+      .select('id')
+      .single();
 
     if (leadError) {
       throw leadError;
     }
 
     await sendEmailJsNotification(emailData);
+
+    return leadRow?.id || null;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -306,7 +314,7 @@ export default function CheckoutPage() {
       return;
     }
 
-    if (membershipLoading) {
+    if (!oneTimeTuneUp && membershipLoading) {
       alert('Still checking your current plan. Please wait a second and try again.');
       return;
     }
@@ -329,14 +337,14 @@ export default function CheckoutPage() {
     setProcessing(true);
 
     try {
-      await saveLeadAndSendEmail();
+      const crmLeadId = await saveLeadAndSendEmail();
 
       const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-checkout-session`;
 
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData.session?.access_token;
 
-      if (!token) {
+      if (!oneTimeTuneUp && !token) {
         alert('Please sign in before checking out.');
         return;
       }
@@ -348,6 +356,7 @@ export default function CheckoutPage() {
         agreementSignedAt: oneTimeTuneUp ? null : new Date().toISOString(),
         replacePlan: oneTimeTuneUp ? false : replacingDifferentPlan,
         currentPlanId: oneTimeTuneUp ? null : currentPlanId || null,
+        crmLeadId,
         ...(isMiniSplit ? { miniSplitHeads } : {}),
       };
 
@@ -356,7 +365,7 @@ export default function CheckoutPage() {
         headers: {
           'Content-Type': 'application/json',
           apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${token || import.meta.env.VITE_SUPABASE_ANON_KEY}`,
         },
         body: JSON.stringify(payload),
       });
@@ -632,7 +641,7 @@ export default function CheckoutPage() {
               <button
                 type="submit"
                 className={styles.submitButton}
-                disabled={processing || membershipLoading || samePlanSelected}
+                disabled={processing || (!oneTimeTuneUp && membershipLoading) || samePlanSelected}
               >
                 {submitButtonText}
               </button>
