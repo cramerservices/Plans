@@ -1,14 +1,13 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import styles from './Header.module.css';
 
-type HeaderProps = {
-  logoHref?: string;
-};
-
-export default function Header({ logoHref }: HeaderProps) {
+export default function Header() {
   const { user, isAdmin, signOut } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const isHomePage = location.pathname === '/';
 
   const handleSignOut = async () => {
     try {
@@ -30,8 +29,11 @@ export default function Header({ logoHref }: HeaderProps) {
   return (
     <header className={styles.header}>
       <div className={styles.container}>
-        {logoHref ? (
-          <a href={logoHref} className={styles.logo}>
+        {isHomePage ? (
+          <a
+            href="https://cramerservicesllc.com"
+            className={styles.logo}
+          >
             {logoImage}
           </a>
         ) : (
