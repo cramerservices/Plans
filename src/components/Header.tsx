@@ -2,7 +2,11 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import styles from './Header.module.css';
 
-export default function Header() {
+type HeaderProps = {
+  logoHref?: string;
+};
+
+export default function Header({ logoHref }: HeaderProps) {
   const { user, isAdmin, signOut } = useAuth();
   const navigate = useNavigate();
 
@@ -15,16 +19,26 @@ export default function Header() {
     }
   };
 
+  const logoImage = (
+    <img
+      src="/Plans/LogoNameTrans.png"
+      alt="Cramer Services"
+      className={styles.logoImage}
+    />
+  );
+
   return (
     <header className={styles.header}>
       <div className={styles.container}>
-     <Link to="/" className={styles.logo}>
-  <img
-   src="/Plans/LogoNameTrans.png"
-    alt="Cramer Services"
-    className={styles.logoImage}
-  />
-</Link>
+        {logoHref ? (
+          <a href={logoHref} className={styles.logo}>
+            {logoImage}
+          </a>
+        ) : (
+          <Link to="/" className={styles.logo}>
+            {logoImage}
+          </Link>
+        )}
 
         <nav className={styles.nav}>
           <Link to="/plans" className={styles.navLink}>Plans</Link>
