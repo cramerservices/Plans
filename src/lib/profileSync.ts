@@ -4,6 +4,10 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
+function normalizePhone(phone?: string | null) {
+  return (phone || '').replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
+}
+
 type TableName = 'customers' | 'portal_customers';
 
 type EmailMatchRow = {
@@ -32,10 +36,37 @@ async function findByNormalizedEmail(table: TableName, email: string) {
   return matchedRow;
 }
 
+async function findCustomerByPhone(phone?: string | null) {
+  const digits = normalizePhone(phone);
+  if (digits.length !== 10) return null;
+
+  const candidates = [
+    digits,
+    `1${digits}`,
+    `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`,
+    `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`,
+    `+1 ${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`,
+  ];
+
+  const { data, error } = await supabase
+    .from('customers')
+    .select('id, email, phone')
+    .in('phone', candidates)
+    .limit(10);
+
+  if (error) {
+    console.error('[profile sync] customers phone lookup error:', error);
+    return null;
+  }
+
+  return (data || []).find((row: any) => normalizePhone(row.phone) === digits) ?? null;
+}
+
 interface SyncProfileParams {
   email: string;
   authUserId: string;
   portalCustomerId?: string | null;
+  phone?: string | null;
 }
 
 async function fallbackSyncProfileClientSide({
@@ -112,6 +143,7 @@ export async function syncProfileByEmail({
   email,
   authUserId,
   portalCustomerId,
+  phone,
 }: SyncProfileParams) {
   const normalizedEmail = normalizeEmail(email);
 
@@ -119,7 +151,8 @@ export async function syncProfileByEmail({
     return null;
   }
 
-  const matchedCustomer = await findByNormalizedEmail('customers', normalizedEmail);
+  const matchedCustomerByEmail = await findByNormalizedEmail('customers', normalizedEmail);
+  const matchedCustomer = matchedCustomerByEmail || (await findCustomerByPhone(phone));
   console.log('[profile sync] matched customers result:', matchedCustomer);
 
   const matchedPortalCustomer =
@@ -177,4 +210,4 @@ export async function syncProfileWithPortalCustomerId(
   });
 }
 
-export { normalizeEmail };
+export { normalizeEmail, normalizePhone };
