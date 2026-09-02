@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import { normalizeEmail } from '../lib/profileSync';
+import { normalizeEmail, syncProfileByEmail } from '../lib/profileSync';
 
 interface AuthContextType {
   user: User | null;
@@ -9,7 +9,7 @@ interface AuthContextType {
   loading: boolean;
   isAdmin: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, fullName: string) => Promise<void>;
+  signUp: (email: string, password: string, fullName: string, phone: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -61,6 +61,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setSession(currentSession);
       setUser(currentUser);
+
+      if (currentUser?.id && currentUser.email) {
+        await syncProfileByEmail({
+          email: currentUser.email,
+          authUserId: currentUser.id,
+          phone: currentUser.user_metadata?.phone || null,
+        });
+      }
 
       const adminAccess = await checkAdminAccess(currentUser);
 
@@ -115,7 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error;
   };
 
-  const signUp = async (email: string, password: string, fullName: string) => {
+  const signUp = async (email: string, password: string, fullName: string, phone: string) => {
     const cleanEmail = normalizeEmail(email);
 
     const { error } = await supabase.auth.signUp({
@@ -124,6 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       options: {
         data: {
           full_name: fullName,
+          phone,
         },
       },
     });
