@@ -50,6 +50,18 @@ function normalizeEmail(email?: string | null) {
   return (email || '').trim().toLowerCase();
 }
 
+function normalizePhone(phone?: string | null) {
+  return (phone || '').replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
+}
+
+function freeServiceAllowance(features?: string[] | null) {
+  for (const feature of features || []) {
+    const match = feature.match(/(\d+)\s+free service/i);
+    if (match) return Number(match[1]);
+  }
+  return 0;
+}
+
 function formatAddress(addressObj: {
   service_address?: string | null;
   city?: string | null;
@@ -81,6 +93,159 @@ async function findCustomerByEmail(email?: string | null) {
   return rows.find((row) => normalizeEmail(row.email) === normalizedEmail) ?? null;
 }
 
+async function findCustomerByPhone(phone?: string | null) {
+  const digits = normalizePhone(phone);
+  if (digits.length !== 10) return null;
+
+  const candidates = [
+    digits,
+    `1${digits}`,
+    `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`,
+    `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`,
+    `+1 ${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`,
+  ];
+
+  const { data, error } = await supabase
+    .from('customers')
+    .select('*')
+    .in('phone', candidates)
+    .limit(10);
+
+  if (error) throw error;
+  const rows = (data as Customer[] | null) ?? [];
+  return rows.find((row) => normalizePhone(row.phone) === digits) ?? null;
+}
+
+async function loadCrmHistory(customerId: string, existingRows: any[]) {
+  const [invoiceResult, estimateResult] = await Promise.all([
+    supabase
+      .from('crm_invoices')
+      .select('*')
+      .eq('customer_id', customerId)
+      .in('status', ['sent', 'partial', 'paid', 'overdue'])
+      .order('invoice_date', { ascending: false }),
+    supabase
+      .from('estimates')
+      .select('*')
+      .eq('customer_id', customerId)
+      .in('status', ['sent', 'approved', 'job_complete'])
+      .order('estimate_date', { ascending: false }),
+  ]);
+
+  if (invoiceResult.error) throw invoiceResult.error;
+  if (estimateResult.error) throw estimateResult.error;
+
+  const invoices = invoiceResult.data || [];
+  const invoiceIds = invoices.map((invoice: any) => invoice.id);
+  let invoiceItems: any[] = [];
+
+  if (invoiceIds.length) {
+    const { data, error } = await supabase
+      .from('crm_invoice_line_items')
+      .select('invoice_id, description')
+      .in('invoice_id', invoiceIds);
+    if (error) throw error;
+    invoiceItems = data || [];
+  }
+
+  const mirrorByInvoice = new Map<string, any>();
+  const mirrorByEstimate = new Map<string, any>();
+  const nonCrmRows: any[] = [];
+
+  for (const row of existingRows) {
+    const payload = row.payload || {};
+    const kind = String(payload.kind || row.service_type || '').toLowerCase();
+    const invoiceId = row.invoice_id || payload.invoice_id;
+    const estimateId = row.estimate_id || payload.estimate_id;
+    if (kind === 'invoice' && invoiceId) mirrorByInvoice.set(invoiceId, row);
+    else if (kind === 'estimate' && estimateId) mirrorByEstimate.set(estimateId, row);
+    else nonCrmRows.push(row);
+  }
+
+  const invoiceRows = invoices.map((invoice: any) => {
+    const mirror = mirrorByInvoice.get(invoice.id);
+    const isFreeService = invoiceItems.some(
+      (item: any) =>
+        item.invoice_id === invoice.id &&
+        /^free service\b/i.test(String(item.description || '').trim())
+    );
+    return {
+      ...mirror,
+      id: mirror?.id || `crm-invoice-${invoice.id}`,
+      customer_id: customerId,
+      invoice_id: invoice.id,
+      service_type: 'invoice',
+      service_date: invoice.invoice_date,
+      technician_name: invoice.tech_name,
+      summary: `Invoice ${invoice.invoice_number} ${invoice.status}. Balance due: $${Number(invoice.amount_due || 0).toFixed(2)}`,
+      created_at: invoice.created_at,
+      completed_at: invoice.updated_at,
+      payload: {
+        ...(mirror?.payload || {}),
+        kind: 'invoice',
+        invoice_id: invoice.id,
+        invoice_number: invoice.invoice_number,
+        estimate_id: invoice.estimate_id || null,
+        status: invoice.status,
+        total_amount: Number(invoice.total_amount || 0),
+        amount_paid: Number(invoice.amount_paid || 0),
+        amount_due: Number(invoice.amount_due || 0),
+        free_service_applied: isFreeService,
+      },
+    };
+  });
+
+  const estimateRows = (estimateResult.data || []).map((estimate: any) => {
+    const mirror = mirrorByEstimate.get(estimate.id);
+    return {
+      ...mirror,
+      id: mirror?.id || `crm-estimate-${estimate.id}`,
+      customer_id: customerId,
+      estimate_id: estimate.id,
+      service_type: 'estimate',
+      service_date: estimate.estimate_date,
+      technician_name: estimate.tech_name,
+      summary: `Estimate ${estimate.estimate_number} ${String(estimate.status).replace(/_/g, ' ')} for $${Number(estimate.total_amount || 0).toFixed(2)}`,
+      created_at: estimate.created_at,
+      completed_at: estimate.updated_at,
+      payload: {
+        ...(mirror?.payload || {}),
+        kind: 'estimate',
+        estimate_id: estimate.id,
+        estimate_number: estimate.estimate_number,
+        status: estimate.status,
+        total_amount: Number(estimate.total_amount || 0),
+      },
+    };
+  });
+
+  return [...nonCrmRows, ...invoiceRows, ...estimateRows].sort((a, b) => {
+    const aDate = new Date(a.service_date || a.completed_at || a.created_at || 0).getTime();
+    const bDate = new Date(b.service_date || b.completed_at || b.created_at || 0).getTime();
+    return bDate - aDate;
+  });
+}
+
+async function loadFreeServiceUsage(customerId: string) {
+  const { data: invoices, error: invoicesError } = await supabase
+    .from('crm_invoices')
+    .select('id')
+    .eq('customer_id', customerId)
+    .neq('status', 'cancelled');
+  if (invoicesError) throw invoicesError;
+
+  const ids = (invoices || []).map((invoice: any) => invoice.id);
+  if (!ids.length) return 0;
+
+  const { data: items, error: itemsError } = await supabase
+    .from('crm_invoice_line_items')
+    .select('invoice_id, description')
+    .in('invoice_id', ids)
+    .ilike('description', 'Free Service%');
+  if (itemsError) throw itemsError;
+  return new Set((items || []).map((item: any) => item.invoice_id)).size;
+}
+
 async function findPortalCustomerByEmail(email?: string | null) {
   const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail) return null;
@@ -107,6 +272,7 @@ const [portalCustomer, setPortalCustomer] = useState<PortalCustomer | null>(null
 const [memberships, setMemberships] = useState<CustomerMembership[]>([]);
 const [services, setServices] = useState<ServiceCompleted[]>([]);
 const [serviceDocs, setServiceDocs] = useState<ServiceDoc[]>([]);
+const [freeServicesUsed, setFreeServicesUsed] = useState(0);
 const [loading, setLoading] = useState(true);
 
 const [isEditingContact, setIsEditingContact] = useState(false);
@@ -138,6 +304,7 @@ const [actionBusyId, setActionBusyId] = useState<string | null>(null);
           setMemberships([]);
           setServices([]);
           setServiceDocs([]);
+          setFreeServicesUsed(0);
           return;
         }
 
@@ -210,6 +377,14 @@ const [actionBusyId, setActionBusyId] = useState<string | null>(null);
           loadedCustomer = await findCustomerByEmail(profileRow?.email || user.email);
           console.log(
             '[Plans linkage] loaded customer from email fallback:',
+            loadedCustomer
+          );
+        }
+
+        if (!loadedCustomer) {
+          loadedCustomer = await findCustomerByPhone(user.user_metadata?.phone || null);
+          console.log(
+            '[Plans linkage] loaded customer from phone fallback:',
             loadedCustomer
           );
         }
@@ -371,6 +546,7 @@ const [actionBusyId, setActionBusyId] = useState<string | null>(null);
               matchedCustomer
             );
             setCustomer(matchedCustomer);
+            loadedCustomer = matchedCustomer;
 
             const { data, error } = await supabase
               .from('services_completed')
@@ -385,6 +561,13 @@ const [actionBusyId, setActionBusyId] = useState<string | null>(null);
             if (error) throw error;
             servicesData = data || [];
           }
+        }
+
+        if (loadedCustomer?.id) {
+          servicesData = await loadCrmHistory(loadedCustomer.id, servicesData);
+          setFreeServicesUsed(await loadFreeServiceUsage(loadedCustomer.id));
+        } else {
+          setFreeServicesUsed(0);
         }
 
         console.log('[Plans linkage] final servicesData:', servicesData);
@@ -423,6 +606,12 @@ const [actionBusyId, setActionBusyId] = useState<string | null>(null);
   const activeMembership = useMemo(() => {
     return memberships.find((m: any) => m.status === 'active') || null;
   }, [memberships]);
+
+  const freeServicesRemaining = useMemo(() => {
+    if (!activeMembership) return 0;
+    const allowance = freeServiceAllowance((activeMembership as any).plan?.features);
+    return Math.max(allowance - freeServicesUsed, 0);
+  }, [activeMembership, freeServicesUsed]);
 
   const saveContact = async () => {
     if (!user?.id) return;
@@ -673,11 +862,11 @@ const handleEstimateDecision = async (
       const status = (payload.status || '').toString().toLowerCase();
 
       if (kind === 'estimate') {
-        return status === 'sent' || status === 'approved';
+        return status === 'sent' || status === 'approved' || status === 'job_complete';
       }
 
       if (kind === 'invoice') {
-        return ['sent', 'partial', 'overdue', 'paid', 'cancelled'].includes(status);
+        return ['sent', 'partial', 'overdue', 'paid'].includes(status);
       }
 
       return true;
@@ -701,7 +890,7 @@ const handleEstimateDecision = async (
         <div className={styles.header}>
           <div>
             <h1 className={styles.title}>Welcome back, Customer!</h1>
-            <p className={styles.subtitle}>Manage your HVAC maintenance membership</p>
+            <p className={styles.subtitle}>Manage your membership, estimates, invoices, and service history</p>
           </div>
         </div>
 
@@ -762,6 +951,15 @@ const handleEstimateDecision = async (
                     </div>
                   </div>
 
+                  {freeServiceAllowance((activeMembership as any).plan?.features) > 0 && (
+                    <div className={styles.benefitItem}>
+                      <div className={styles.benefitNumber}>{freeServicesRemaining}</div>
+                      <div className={styles.benefitLabel}>
+                        Free Service{freeServicesRemaining !== 1 ? 's' : ''} Remaining
+                      </div>
+                    </div>
+                  )}
+
                   {(activeMembership as any).plan?.priority_service && (
                     <div className={styles.benefitBadge}>
                       <span>✓</span> Priority Service Active
@@ -788,6 +986,8 @@ const handleEstimateDecision = async (
                 )}
               </div>
             </div>
+          </>
+        )}
 
             <div className={styles.card}>
               <h2 className={styles.cardTitle}>Tune-Up Reports</h2>
@@ -1193,8 +1393,6 @@ const handleEstimateDecision = async (
 </div>
               </div>
             </div>
-          </>
-        )}
       </div>
     </div>
   );
