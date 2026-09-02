@@ -54,8 +54,11 @@ function normalizePhone(phone?: string | null) {
   return (phone || '').replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
 }
 
-function freeServiceAllowance(features?: string[] | null) {
-  for (const feature of features || []) {
+function freeServiceAllowance(plan?: { free_services_per_year?: number | null; features?: string[] | null } | null) {
+  const configuredAllowance = Number(plan?.free_services_per_year);
+  if (Number.isFinite(configuredAllowance)) return Math.max(configuredAllowance, 0);
+
+  for (const feature of plan?.features || []) {
     const match = feature.match(/(\d+)\s+free service/i);
     if (match) return Number(match[1]);
   }
@@ -226,12 +229,21 @@ async function loadCrmHistory(customerId: string, existingRows: any[]) {
   });
 }
 
-async function loadFreeServiceUsage(customerId: string) {
-  const { data: invoices, error: invoicesError } = await supabase
+async function loadFreeServiceUsage(
+  customerId: string,
+  periodStart?: string | null,
+  periodEnd?: string | null
+) {
+  let invoiceQuery = supabase
     .from('crm_invoices')
     .select('id')
     .eq('customer_id', customerId)
     .neq('status', 'cancelled');
+
+  if (periodStart) invoiceQuery = invoiceQuery.gte('invoice_date', periodStart);
+  if (periodEnd) invoiceQuery = invoiceQuery.lt('invoice_date', periodEnd);
+
+  const { data: invoices, error: invoicesError } = await invoiceQuery;
   if (invoicesError) throw invoicesError;
 
   const ids = (invoices || []).map((invoice: any) => invoice.id);
@@ -565,7 +577,16 @@ const [actionBusyId, setActionBusyId] = useState<string | null>(null);
 
         if (loadedCustomer?.id) {
           servicesData = await loadCrmHistory(loadedCustomer.id, servicesData);
-          setFreeServicesUsed(await loadFreeServiceUsage(loadedCustomer.id));
+          const loadedActiveMembership = loadedMemberships.find(
+            (membership: any) => membership.status === 'active'
+          );
+          setFreeServicesUsed(
+            await loadFreeServiceUsage(
+              loadedCustomer.id,
+              (loadedActiveMembership as any)?.start_date,
+              (loadedActiveMembership as any)?.end_date
+            )
+          );
         } else {
           setFreeServicesUsed(0);
         }
@@ -609,7 +630,7 @@ const [actionBusyId, setActionBusyId] = useState<string | null>(null);
 
   const freeServicesRemaining = useMemo(() => {
     if (!activeMembership) return 0;
-    const allowance = freeServiceAllowance((activeMembership as any).plan?.features);
+    const allowance = freeServiceAllowance((activeMembership as any).plan);
     return Math.max(allowance - freeServicesUsed, 0);
   }, [activeMembership, freeServicesUsed]);
 
