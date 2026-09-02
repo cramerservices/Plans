@@ -613,6 +613,13 @@ const [actionBusyId, setActionBusyId] = useState<string | null>(null);
     return Math.max(allowance - freeServicesUsed, 0);
   }, [activeMembership, freeServicesUsed]);
 
+  const tuneUpsRemaining = useMemo(() => {
+    if (!activeMembership) return 0;
+    const storedRemaining = Number((activeMembership as any).tune_ups_remaining || 0);
+    const annualAllowance = Number((activeMembership as any).plan?.tune_ups_per_year || 0);
+    return Math.max(Math.min(storedRemaining, annualAllowance), 0);
+  }, [activeMembership]);
+
   const saveContact = async () => {
     if (!user?.id) return;
 
@@ -943,22 +950,20 @@ const handleEstimateDecision = async (
                 <div className={styles.benefits}>
                   <div className={styles.benefitItem}>
                     <div className={styles.benefitNumber}>
-                      {(activeMembership as any).tune_ups_remaining}
+                      {tuneUpsRemaining}
                     </div>
                     <div className={styles.benefitLabel}>
-                      Tune-Up{(activeMembership as any).tune_ups_remaining !== 1 ? 's' : ''}{' '}
+                      Tune-Up{tuneUpsRemaining !== 1 ? 's' : ''}{' '}
                       Remaining
                     </div>
                   </div>
 
-                  {freeServiceAllowance((activeMembership as any).plan?.features) > 0 && (
-                    <div className={styles.benefitItem}>
-                      <div className={styles.benefitNumber}>{freeServicesRemaining}</div>
-                      <div className={styles.benefitLabel}>
-                        Free Service{freeServicesRemaining !== 1 ? 's' : ''} Remaining
-                      </div>
+                  <div className={styles.benefitItem}>
+                    <div className={styles.benefitNumber}>{freeServicesRemaining}</div>
+                    <div className={styles.benefitLabel}>
+                      Free Service{freeServicesRemaining !== 1 ? 's' : ''} Remaining
                     </div>
-                  )}
+                  </div>
 
                   {(activeMembership as any).plan?.priority_service && (
                     <div className={styles.benefitBadge}>
