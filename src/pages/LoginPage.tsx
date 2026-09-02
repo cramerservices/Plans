@@ -17,6 +17,7 @@ export default function LoginPage() {
     email: '',
     password: '',
     fullName: '',
+    phone: '',
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -34,10 +35,10 @@ export default function LoginPage() {
 
     try {
       if (isSignUp) {
-        await signUp(formData.email, formData.password, formData.fullName);
+        await signUp(formData.email, formData.password, formData.fullName, formData.phone);
         alert('Account created successfully! Please log in.');
         setIsSignUp(false);
-        setFormData({ email: formData.email, password: '', fullName: '' });
+        setFormData({ email: formData.email, password: '', fullName: '', phone: '' });
       } else {
         await signIn(formData.email, formData.password);
         const from = (location.state as any)?.from?.pathname || '/dashboard';
@@ -69,17 +70,30 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className={styles.form}>
             {isSignUp && (
-              <div className={styles.formGroup}>
-                <label>Full Name</label>
-                <input
-                  type="text"
-                  name="fullName"
-                  value={formData.fullName}
-                  onChange={handleChange}
-                  required
-                  placeholder="John Doe"
-                />
-              </div>
+              <>
+                <div className={styles.formGroup}>
+                  <label>Full Name</label>
+                  <input
+                    type="text"
+                    name="fullName"
+                    value={formData.fullName}
+                    onChange={handleChange}
+                    required
+                    placeholder="John Doe"
+                  />
+                </div>
+                <div className={styles.formGroup}>
+                  <label>Phone Number</label>
+                  <input
+                    type="tel"
+                    name="phone"
+                    value={formData.phone}
+                    onChange={handleChange}
+                    required
+                    placeholder="(314) 555-1234"
+                  />
+                </div>
+              </>
             )}
 
             <div className={styles.formGroup}>
