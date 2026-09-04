@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Header from '../components/Header';
 import { useAuth } from '../contexts/AuthContext';
@@ -21,6 +21,10 @@ export default function LoginPage() {
     fullName: '',
     phone: '',
   });
+
+  useEffect(() => {
+    setIsSignUp(new URLSearchParams(location.search).get('mode') === 'signup');
+  }, [location.search]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
