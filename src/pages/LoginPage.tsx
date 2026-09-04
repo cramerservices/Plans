@@ -9,7 +9,9 @@ export default function LoginPage() {
   const location = useLocation();
   const { signIn, signUp } = useAuth();
 
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(
+    () => new URLSearchParams(location.search).get('mode') === 'signup'
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -62,7 +64,7 @@ export default function LoginPage() {
           </h1>
           <p className={styles.subtitle}>
             {isSignUp
-              ? 'Sign up to purchase a maintenance plan'
+              ? 'Sign up to access your customer dashboard'
               : 'Sign in to access your account'}
           </p>
 
