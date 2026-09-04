@@ -47,6 +47,7 @@ export default function Header() {
 
           {user ? (
             <>
+              <Link to="/schedule" className={styles.navLink}>Schedule</Link>
               <Link to="/dashboard" className={styles.navLink}>Dashboard</Link>
               {isAdmin && (
                 <Link to="/admin" className={styles.navLink}>Admin</Link>

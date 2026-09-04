@@ -10,6 +10,7 @@ import CustomerDashboard from './pages/CustomerDashboard';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
 import SuccessPage from './pages/SuccessPage';
+import SchedulePage from './pages/SchedulePage';
 
 function App() {
   return (
@@ -30,6 +31,11 @@ function App() {
               <InvoiceCheckoutPage />
             </ProtectedRoute>
           }
+        />
+
+        <Route
+          path="/schedule"
+          element={<ProtectedRoute><SchedulePage /></ProtectedRoute>}
         />
 
         <Route
