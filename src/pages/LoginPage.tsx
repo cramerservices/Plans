@@ -24,7 +24,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     setIsSignUp(new URLSearchParams(location.search).get('mode') === 'signup');
-  }, [location.search]);
+  }, [location.key, location.search]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
