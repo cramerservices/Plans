@@ -10,9 +10,6 @@ import {
 } from '../lib/miniSplitPricing';
 import styles from './CheckoutPage.module.css';
 
-const EMAILJS_PUBLIC_KEY = 'TDIki3rqftcomcjJC';
-const EMAILJS_SERVICE_ID = 'service_ebrskb5';
-const EMAILJS_TEMPLATE_ID = 'template_b95xw46';
 
 export default function CheckoutPage() {
   const { planId } = useParams<{ planId: string }>();
@@ -168,35 +165,6 @@ export default function CheckoutPage() {
     ? `Continue to Stripe - $${displayedPrice}`
     : `Continue to Stripe - $${displayedPrice}/year`;
 
-  const sendEmailJsNotification = async (leadDetails: {
-    subject: string;
-    name: string;
-    phone: string;
-    email: string;
-    service: string;
-    details: string;
-    message: string;
-    time: string;
-  }) => {
-    const response = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        service_id: EMAILJS_SERVICE_ID,
-        template_id: EMAILJS_TEMPLATE_ID,
-        user_id: EMAILJS_PUBLIC_KEY,
-        template_params: leadDetails,
-      }),
-    });
-
-    if (!response.ok) {
-      const text = await response.text().catch(() => '');
-      throw new Error(text || 'EmailJS notification failed.');
-    }
-  };
-
   const saveLeadAndSendEmail = async () => {
     if (!plan) return;
 
@@ -232,33 +200,23 @@ export default function CheckoutPage() {
       time: new Date().toLocaleString(),
     };
 
-    const { data: leadRow, error: leadError } = await supabase
-      .from('crm_leads')
-      .insert([
-        {
-          full_name: formData.fullName.trim(),
-          phone: formData.phone.trim(),
-          email: formData.email.trim().toLowerCase(),
-          service_type: serviceName,
-          details,
-          status: 'pending',
-          source: oneTimeTuneUp
-            ? 'plans_one_time_tune_up_checkout'
-            : 'plans_membership_checkout',
-          payment_status: 'unpaid',
-          checkout_status: 'checkout_started',
-        },
-      ])
-      .select('id')
-      .single();
+    const { data, error } = await supabase.functions.invoke('website-lead', {
+      body: {
+        ...emailData,
+        serviceAddress: fullAddress,
+        source: oneTimeTuneUp
+          ? 'plans_one_time_tune_up_checkout'
+          : 'plans_membership_checkout',
+        paymentStatus: 'unpaid',
+        checkoutStatus: 'checkout_started',
+      },
+    });
 
-    if (leadError) {
-      throw leadError;
+    if (error || !data?.success) {
+      throw new Error(data?.error || error?.message || 'Could not save the request.');
     }
 
-    await sendEmailJsNotification(emailData);
-
-    return leadRow?.id || null;
+    return data.leadId || null;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
